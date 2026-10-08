@@ -34,8 +34,8 @@ vi.mock('./invoices.api', () => ({
       items: [
         {
           id: 'item-1',
-          nameSnapshot: 'Commercial RO System 50 LPH',
-          descriptionSnapshot: 'High TDS 5 Stage Membrane',
+          nameSnapshot: 'Commercial Equipment System',
+          descriptionSnapshot: 'Standard Configuration',
           quantity: 1,
           unitPriceSnapshot: '10000.00',
           discountAmount: '0.00',
@@ -123,8 +123,8 @@ describe('InvoiceDetailPage Component & Print Isolation', () => {
     // Verify Invoice Content
     expect(screen.getAllByText('INV-2026-0001').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/Aarav Sharma/i)).toBeDefined();
-    expect(screen.getByText('Commercial RO System 50 LPH')).toBeDefined();
-    expect(screen.getByText('SR ENTERPRISES')).toBeDefined();
+    expect(screen.getByText('Commercial Equipment System')).toBeDefined();
+    expect(screen.getByText('Enterprises CRM')).toBeDefined();
 
     // Trigger Print
     const printBtn = screen.getByText('Print Invoice');

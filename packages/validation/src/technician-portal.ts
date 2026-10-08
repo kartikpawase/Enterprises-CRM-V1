@@ -44,10 +44,15 @@ export const TechnicianJobExecutionSchema = z.object({
     .array(
       z.object({
         itemId: z.string().optional(),
+        productId: z.string().optional(),
+        inventoryItemId: z.string().optional(),
+        sku: z.string().optional(),
         itemName: z.string().min(1, 'Item name is required'),
-        quantity: z.number().int().positive('Quantity must be greater than 0'),
+        description: z.string().optional(),
+        quantity: z.coerce.number().positive('Quantity must be greater than 0'),
         isWarrantyCovered: z.boolean().default(false),
-        price: z.number().min(0).optional(),
+        price: z.coerce.number().min(0).optional(),
+        unitPrice: z.coerce.number().min(0).optional(),
       })
     )
     .optional(),
@@ -69,13 +74,32 @@ export const TechnicianJobCompleteSchema = z.object({
     .array(
       z.object({
         itemId: z.string().optional(),
+        productId: z.string().optional(),
+        inventoryItemId: z.string().optional(),
+        sku: z.string().optional(),
         itemName: z.string().min(1, 'Item name is required'),
-        quantity: z.number().int().positive('Quantity must be greater than 0'),
+        description: z.string().optional(),
+        quantity: z.coerce.number().positive('Quantity must be greater than 0'),
         isWarrantyCovered: z.boolean().default(false),
-        price: z.number().min(0).optional(),
+        price: z.coerce.number().min(0).optional(),
+        unitPrice: z.coerce.number().min(0).optional(),
       })
     )
     .optional(),
+  serviceCharge: z.coerce.number().min(0).optional(),
+  laborCharges: z.coerce.number().min(0).optional(),
+  gstEnabled: z.boolean().default(false),
+  gstRate: z.coerce.number().min(0).max(100).optional(),
+  payment: z
+    .object({
+      method: z.enum(['CASH', 'ONLINE', 'UPI', 'CARD', 'BANK_TRANSFER', 'CHEQUE', 'OTHER']),
+      amount: z.coerce.number().min(0),
+      reference: z.string().optional().nullable(),
+      referenceNumber: z.string().optional().nullable(),
+      notes: z.string().optional().nullable(),
+    })
+    .optional(),
+  initialPayment: z.any().optional(),
   businessFields: z.record(z.any()).optional(),
   customerSignatureFileId: z.string().optional(),
   customerSignatureBase64: z.string().optional(),

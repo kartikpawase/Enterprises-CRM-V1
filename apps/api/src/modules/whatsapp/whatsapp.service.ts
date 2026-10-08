@@ -18,30 +18,30 @@ export const APPROVED_WHATSAPP_TEMPLATES: WhatsAppTemplateDefinition[] = [
     name: 'invoice_reminder',
     category: 'TRANSACTIONAL',
     language: 'en',
-    description: 'Friendly reminder for pending RO service or machine sale invoice payment.',
+    description: 'Friendly reminder for pending service or equipment sale invoice payment.',
     parameterKeys: ['customer_name', 'invoice_number', 'amount_due', 'due_date'],
     sampleText:
-      'Dear {{customer_name}}, this is a friendly reminder from SR Enterprises that Invoice {{invoice_number}} for Rs. {{amount_due}} is due on {{due_date}}. Please make payment via UPI or visit our customer portal.',
+      'Dear {{customer_name}}, this is a friendly reminder that Invoice {{invoice_number}} for Rs. {{amount_due}} is due on {{due_date}}. Please make payment via UPI or visit our customer portal.',
   },
   {
     id: 'service_scheduled',
     name: 'service_scheduled',
     category: 'UTILITY',
     language: 'en',
-    description: 'Notification to customer when a doorstep RO service visit is scheduled.',
+    description: 'Notification to customer when a doorstep service visit is scheduled.',
     parameterKeys: ['customer_name', 'machine_model', 'scheduled_time', 'technician_name'],
     sampleText:
-      'Hello {{customer_name}}, your RO service visit for {{machine_model}} has been scheduled on {{scheduled_time}}. Technician {{technician_name}} will visit your registered address.',
+      'Hello {{customer_name}}, your service visit for {{machine_model}} has been scheduled on {{scheduled_time}}. Technician {{technician_name}} will visit your registered address.',
   },
   {
     id: 'job_completed',
     name: 'job_completed',
     category: 'UTILITY',
     language: 'en',
-    description: 'Service completion confirmation and water purifier health summary.',
+    description: 'Service completion confirmation and equipment health summary.',
     parameterKeys: ['customer_name', 'job_card_number', 'machine_model', 'service_summary'],
     sampleText:
-      'Dear {{customer_name}}, service for your {{machine_model}} under Job Card {{job_card_number}} has been successfully completed: {{service_summary}}. Thank you for choosing SR Enterprises!',
+      'Dear {{customer_name}}, service for your {{machine_model}} under Job Card {{job_card_number}} has been successfully completed: {{service_summary}}. Thank you for choosing Enterprises CRM!',
   },
   {
     id: 'payment_receipt',
@@ -51,17 +51,17 @@ export const APPROVED_WHATSAPP_TEMPLATES: WhatsAppTemplateDefinition[] = [
     description: 'Official payment acknowledgement and receipt notification.',
     parameterKeys: ['customer_name', 'receipt_number', 'amount_paid', 'invoice_number'],
     sampleText:
-      'Hello {{customer_name}}, we have received your payment of Rs. {{amount_paid}} for Invoice {{invoice_number}} (Receipt #{{receipt_number}}). Thank you for your business with SR Enterprises.',
+      'Hello {{customer_name}}, we have received your payment of Rs. {{amount_paid}} for Invoice {{invoice_number}} (Receipt #{{receipt_number}}). Thank you for your business with Enterprises CRM.',
   },
   {
     id: 'warranty_expiry_notice',
     name: 'warranty_expiry_notice',
     category: 'UTILITY',
     language: 'en',
-    description: 'Advance notice for RO water purifier warranty or AMC expiry.',
+    description: 'Advance notice for equipment warranty or AMC expiry.',
     parameterKeys: ['customer_name', 'machine_model', 'expiry_date'],
     sampleText:
-      'Dear {{customer_name}}, the warranty / AMC for your RO system {{machine_model}} is expiring on {{expiry_date}}. Contact SR Enterprises to renew and enjoy uninterrupted pure water service.',
+      'Dear {{customer_name}}, the warranty / AMC for your equipment {{machine_model}} is expiring on {{expiry_date}}. Contact us to renew and enjoy uninterrupted service.',
   },
 ];
 
@@ -353,7 +353,7 @@ export class WhatsAppService {
       // Dynamic field extraction from authoritative CRM record
       const customerName = jobCard.customerName || 'Valued Customer';
       const customerPhone = jobCard.customerPhone || 'N/A';
-      const machineName = jobCard.productName || jobCard.productBrand || 'RO Water Purifier';
+      const machineName = jobCard.productName || jobCard.productBrand || 'Equipment';
       const serialNumber = jobCard.serialNumber || 'N/A';
 
       const formatTitleCase = (str?: string | null): string => {
@@ -401,51 +401,73 @@ Please check the CRM for complete job details.`;
 
       const directUrl = `https://api.whatsapp.com/send?phone=${normalizedPhone}&text=${encodeURIComponent(messageText)}`;
 
+      // Resolve contact and conversation for audit and duplicate check
+      let contact: any = null;
+      let conversation: any = null;
+      try {
+        contact = await whatsappRepository.findOrCreateContact(normalizedPhone, null);
+        conversation = await whatsappRepository.findOrCreateConversation(contact.id, null);
+
+        // Check for recent duplicate message if not forced
+        if (!options?.forceResend) {
+          const recent = await whatsappRepository.findMessages(conversation.id, 1, 5);
+          const sixtySecAgo = Date.now() - 60000;
+          const duplicate = recent.data.find(
+            (m) =>
+              m.direction === 'OUTBOUND' &&
+              m.content.includes(jobCard.jobCardNumber) &&
+              new Date(m.createdAt).getTime() > sixtySecAgo &&
+              m.status !== 'FAILED'
+          );
+          if (duplicate) {
+            return {
+              success: true,
+              status: 'SKIPPED_DUPLICATE',
+              isDuplicate: true,
+              recipientPhone: normalizedPhone,
+              technicianName,
+              providerMessageId: duplicate.providerMessageId || duplicate.id,
+              messageText,
+              directUrl,
+            };
+          }
+        }
+      } catch {}
+
       // Dispatch via configured WhatsApp provider
       const provider = getWhatsAppProvider();
       const sendResult = await provider.sendTextMessage(normalizedPhone, messageText);
 
-      // Create contact, conversation and local message for audit
-      try {
-        const contact = await whatsappRepository.findOrCreateContact(normalizedPhone, null);
-        const conversation = await whatsappRepository.findOrCreateConversation(contact.id, null);
-
-        const localMessage = await whatsappRepository.createOutboundMessage({
-          conversationId: conversation.id,
-          contactId: contact.id,
-          content: messageText,
-          messageType: 'TEXT',
-          ...(options?.actorUserId ? { sentByUserId: options.actorUserId } : {}),
-          status: sendResult.status || (sendResult.success ? 'SENT' : 'FAILED'),
-          ...(sendResult.providerMessageId ? { providerMessageId: sendResult.providerMessageId } : {}),
-          ...(sendResult.error?.code ? { errorCode: sendResult.error.code } : {}),
-          ...(sendResult.error?.message ? { errorMessage: sendResult.error.message } : {}),
-        });
-
-        return {
-          success: true,
-          status: sendResult.status || (sendResult.success ? 'SENT' : 'DIRECT_LINK_READY'),
-          recipientPhone: normalizedPhone,
-          technicianName,
-          providerMessageId: sendResult.providerMessageId || localMessage?.id,
-          messageText,
-          directUrl,
-          error: sendResult.success ? undefined : sendResult.error?.message,
-          errorCode: sendResult.error?.code,
-        };
-      } catch {
-        return {
-          success: true,
-          status: sendResult.status || (sendResult.success ? 'SENT' : 'DIRECT_LINK_READY'),
-          recipientPhone: normalizedPhone,
-          technicianName,
-          providerMessageId: sendResult.providerMessageId,
-          messageText,
-          directUrl,
-          error: sendResult.success ? undefined : sendResult.error?.message,
-          errorCode: sendResult.error?.code,
-        };
+      // Create local message record for audit
+      let localMessageId: string | undefined;
+      if (conversation && contact) {
+        try {
+          const localMessage = await whatsappRepository.createOutboundMessage({
+            conversationId: conversation.id,
+            contactId: contact.id,
+            content: messageText,
+            messageType: 'TEXT',
+            ...(options?.actorUserId ? { sentByUserId: options.actorUserId } : {}),
+            status: sendResult.status || (sendResult.success ? 'SENT' : 'FAILED'),
+            ...(sendResult.providerMessageId ? { providerMessageId: sendResult.providerMessageId } : {}),
+            ...(sendResult.error?.code ? { errorCode: sendResult.error.code } : {}),
+            ...(sendResult.error?.message ? { errorMessage: sendResult.error.message } : {}),
+          });
+          localMessageId = localMessage?.id;
+        } catch {}
       }
+
+      return {
+        success: sendResult.success,
+        status: sendResult.status || (sendResult.success ? 'SENT' : 'FAILED'),
+        recipientPhone: normalizedPhone,
+        technicianName,
+        providerMessageId: sendResult.providerMessageId || localMessageId,
+        messageText,
+        directUrl,
+        error: sendResult.success ? undefined : (sendResult.error?.message || 'WhatsApp delivery failed'),
+        errorCode: sendResult.error?.code,
+      };
     } catch (err: any) {
       return {
         success: false,
@@ -471,6 +493,7 @@ Please check the CRM for complete job details.`;
     directUrl?: string;
     error?: string;
     errorCode?: string;
+    isDuplicate?: boolean;
   }> {
     if (!service) {
       return { success: false, status: 'FAILED', error: 'Invalid service record' };
@@ -503,7 +526,7 @@ Please check the CRM for complete job details.`;
 
     const customerName = service.customerName || 'Valued Customer';
     const customerPhone = service.customerPhone || 'N/A';
-    const machineName = service.productName || service.productBrand || 'RO Water Purifier';
+    const machineName = service.productName || service.productBrand || 'Equipment';
     const serialNumber = service.serialNumber || 'N/A';
 
     const formatTitleCase = (str?: string | null): string => {
@@ -551,50 +574,72 @@ Please check the CRM for complete job details.`;
 
     const directUrl = `https://api.whatsapp.com/send?phone=${normalizedPhone}&text=${encodeURIComponent(messageText)}`;
 
+    // Resolve contact and conversation for audit and duplicate check
+    let contact: any = null;
+    let conversation: any = null;
+    try {
+      contact = await whatsappRepository.findOrCreateContact(normalizedPhone, null);
+      conversation = await whatsappRepository.findOrCreateConversation(contact.id, null);
+
+      if (!options?.forceResend) {
+        const recent = await whatsappRepository.findMessages(conversation.id, 1, 5);
+        const sixtySecAgo = Date.now() - 60000;
+        const duplicate = recent.data.find(
+          (m) =>
+            m.direction === 'OUTBOUND' &&
+            m.content.includes(service.serviceNumber) &&
+            new Date(m.createdAt).getTime() > sixtySecAgo &&
+            m.status !== 'FAILED'
+        );
+        if (duplicate) {
+          return {
+            success: true,
+            status: 'SKIPPED_DUPLICATE',
+            isDuplicate: true,
+            recipientPhone: normalizedPhone,
+            technicianName,
+            providerMessageId: duplicate.providerMessageId || duplicate.id,
+            messageText,
+            directUrl,
+          };
+        }
+      }
+    } catch {}
+
     // Dispatch via configured WhatsApp provider
     const provider = getWhatsAppProvider();
     const sendResult = await provider.sendTextMessage(normalizedPhone, messageText);
 
-    try {
-      const contact = await whatsappRepository.findOrCreateContact(normalizedPhone, null);
-      const conversation = await whatsappRepository.findOrCreateConversation(contact.id, null);
-
-      const localMessage = await whatsappRepository.createOutboundMessage({
-        conversationId: conversation.id,
-        contactId: contact.id,
-        content: messageText,
-        messageType: 'TEXT',
-        ...(options?.actorUserId ? { sentByUserId: options.actorUserId } : {}),
-        status: sendResult.status || (sendResult.success ? 'SENT' : 'FAILED'),
-        ...(sendResult.providerMessageId ? { providerMessageId: sendResult.providerMessageId } : {}),
-        ...(sendResult.error?.code ? { errorCode: sendResult.error.code } : {}),
-        ...(sendResult.error?.message ? { errorMessage: sendResult.error.message } : {}),
-      });
-
-      return {
-        success: true,
-        status: sendResult.status || (sendResult.success ? 'SENT' : 'DIRECT_LINK_READY'),
-        recipientPhone: normalizedPhone,
-        technicianName,
-        providerMessageId: sendResult.providerMessageId || localMessage?.id,
-        messageText,
-        directUrl,
-        error: sendResult.success ? undefined : sendResult.error?.message,
-        errorCode: sendResult.error?.code,
-      };
-    } catch {
-      return {
-        success: true,
-        status: sendResult.status || (sendResult.success ? 'SENT' : 'DIRECT_LINK_READY'),
-        recipientPhone: normalizedPhone,
-        technicianName,
-        providerMessageId: sendResult.providerMessageId,
-        messageText,
-        directUrl,
-        error: sendResult.success ? undefined : sendResult.error?.message,
-        errorCode: sendResult.error?.code,
-      };
+    // Create local message record for audit
+    let localMessageId: string | undefined;
+    if (conversation && contact) {
+      try {
+        const localMessage = await whatsappRepository.createOutboundMessage({
+          conversationId: conversation.id,
+          contactId: contact.id,
+          content: messageText,
+          messageType: 'TEXT',
+          ...(options?.actorUserId ? { sentByUserId: options.actorUserId } : {}),
+          status: sendResult.status || (sendResult.success ? 'SENT' : 'FAILED'),
+          ...(sendResult.providerMessageId ? { providerMessageId: sendResult.providerMessageId } : {}),
+          ...(sendResult.error?.code ? { errorCode: sendResult.error.code } : {}),
+          ...(sendResult.error?.message ? { errorMessage: sendResult.error.message } : {}),
+        });
+        localMessageId = localMessage?.id;
+      } catch {}
     }
+
+    return {
+      success: sendResult.success,
+      status: sendResult.status || (sendResult.success ? 'SENT' : 'FAILED'),
+      recipientPhone: normalizedPhone,
+      technicianName,
+      providerMessageId: sendResult.providerMessageId || localMessageId,
+      messageText,
+      directUrl,
+      error: sendResult.success ? undefined : (sendResult.error?.message || 'WhatsApp delivery failed'),
+      errorCode: sendResult.error?.code,
+    };
   }
 
   /**
@@ -631,7 +676,7 @@ Please check the CRM for complete job details.`;
       };
     }
 
-    const machineName = service.productName || service.productBrand || 'RO Water Purifier';
+    const machineName = service.productName || service.productBrand || 'Equipment';
     const serialNumber = service.serialNumber || 'N/A';
     const technicianName = service.technicianName || service.technician?.fullName || 'Assigned Specialist';
     const technicianPhone = service.technicianPhone || service.technician?.phone || '';
@@ -666,17 +711,17 @@ Please check the CRM for complete job details.`;
 
     const messageText = `Hello ${customerName},
 
-Your service visit with SR Enterprises has been confirmed!
+Your service visit with Enterprises CRM has been confirmed!
 
 Service #: ${service.serviceNumber}
-Machine: ${machineName}${serialNumber !== 'N/A' ? ` (SN: ${serialNumber})` : ''}
+Equipment: ${machineName}${serialNumber !== 'N/A' ? ` (SN: ${serialNumber})` : ''}
 Service Type: ${serviceType}
 Visit Date: ${scheduledDateStr}
 Time Slot: ${timeSlot}
-Service Type: ${serviceLocation}
+Service Location: ${serviceLocation}
 Assigned Technician: ${techInfo}
 
-Our technician will contact you prior to arrival. Thank you for choosing SR Enterprises!`;
+Our technician will contact you prior to arrival. Thank you for choosing Enterprises CRM!`;
 
     const directUrl = `https://api.whatsapp.com/send?phone=${normalizedPhone}&text=${encodeURIComponent(messageText)}`;
 
@@ -684,6 +729,7 @@ Our technician will contact you prior to arrival. Thank you for choosing SR Ente
     const provider = getWhatsAppProvider();
     const sendResult = await provider.sendTextMessage(normalizedPhone, messageText);
 
+    let localMessageId: string | undefined;
     try {
       const contact = await whatsappRepository.findOrCreateContact(normalizedPhone, service.customerId || null);
       const conversation = await whatsappRepository.findOrCreateConversation(contact.id, contact.customerId);
@@ -699,31 +745,20 @@ Our technician will contact you prior to arrival. Thank you for choosing SR Ente
         ...(sendResult.error?.code ? { errorCode: sendResult.error.code } : {}),
         ...(sendResult.error?.message ? { errorMessage: sendResult.error.message } : {}),
       });
+      localMessageId = localMessage?.id;
+    } catch {}
 
-      return {
-        success: true,
-        status: sendResult.status || (sendResult.success ? 'SENT' : 'DIRECT_LINK_READY'),
-        recipientPhone: normalizedPhone,
-        customerName,
-        providerMessageId: sendResult.providerMessageId || localMessage?.id,
-        messageText,
-        directUrl,
-        error: sendResult.success ? undefined : sendResult.error?.message,
-        errorCode: sendResult.error?.code,
-      };
-    } catch {
-      return {
-        success: true,
-        status: sendResult.status || (sendResult.success ? 'SENT' : 'DIRECT_LINK_READY'),
-        recipientPhone: normalizedPhone,
-        customerName,
-        providerMessageId: sendResult.providerMessageId,
-        messageText,
-        directUrl,
-        error: sendResult.success ? undefined : sendResult.error?.message,
-        errorCode: sendResult.error?.code,
-      };
-    }
+    return {
+      success: sendResult.success,
+      status: sendResult.status || (sendResult.success ? 'SENT' : 'FAILED'),
+      recipientPhone: normalizedPhone,
+      customerName,
+      providerMessageId: sendResult.providerMessageId || localMessageId,
+      messageText,
+      directUrl,
+      error: sendResult.success ? undefined : (sendResult.error?.message || 'WhatsApp delivery failed'),
+      errorCode: sendResult.error?.code,
+    };
   }
 }
 

@@ -18,14 +18,6 @@ const CATEGORIES = [
   'Spare Parts & Components',
   'Consumables & Supplies',
   'Accessories & Tools',
-  'Filter',
-  'Membrane',
-  'Pump',
-  'Power Supply / SMPS',
-  'Fitting',
-  'Tubing',
-  'Accessories',
-  'Spare Part',
   'Other',
 ];
 

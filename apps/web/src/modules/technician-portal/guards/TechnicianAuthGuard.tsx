@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { TECHNICIAN_AUTH_ROUTE, TECHNICIAN_AUTH_API_PREFIX } from '@crm/shared';
 import { apiClient } from '../../../lib/api-client';
 import { Loader2 } from 'lucide-react';
+import { stopSharedTechnicianWatch } from '../hooks/useTechnicianTracking';
 
 export interface AuthenticatedTechnician {
   id: string;
@@ -76,6 +77,10 @@ export const TechnicianAuthGuard: React.FC<TechnicianAuthGuardProps> = ({ childr
 
   const logout = useCallback(async () => {
     try {
+      stopSharedTechnicianWatch();
+      try {
+        await apiClient.post('/maps/technician/stop', {});
+      } catch {}
       await apiClient.post(`${TECHNICIAN_AUTH_API_PREFIX}/logout`, {});
     } finally {
       setTechnician(null);

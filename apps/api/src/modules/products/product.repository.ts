@@ -5,56 +5,7 @@ import { randomUUID } from 'crypto';
 import type { ProductQueryFilter, CreateProductInput, UpdateProductInput } from '@crm/validation';
 
 // Resilient memory state for offline desktop and local development
-const memoryProducts: any[] = [
-  {
-    id: 'p1111111-1111-1111-1111-111111111111',
-    sku: 'RO-100-GPD',
-    name: 'Aquapure RO 100 GPD Commercial',
-    productType: 'RO_MACHINE',
-    brand: 'Aquapure',
-    model: 'AP-100C',
-    description: 'High recovery commercial RO water purifier 100 GPD capacity',
-    unitPrice: '25000.00',
-    taxRatePercent: '18.00',
-    defaultWarrantyMonths: 24,
-    defaultServiceIntervalMonths: 6,
-    isActive: true,
-    createdAt: new Date('2026-01-01T10:00:00Z'),
-    updatedAt: new Date('2026-01-01T10:00:00Z'),
-  },
-  {
-    id: 'p2222222-2222-2222-2222-222222222222',
-    sku: 'RO-50-RES',
-    name: 'Aquafresh Residential RO System',
-    productType: 'RO_MACHINE',
-    brand: 'Aquafresh',
-    model: 'AF-50R',
-    description: '7-stage residential RO+UV+UF with mineral booster',
-    unitPrice: '14500.00',
-    taxRatePercent: '18.00',
-    defaultWarrantyMonths: 12,
-    defaultServiceIntervalMonths: 4,
-    isActive: true,
-    createdAt: new Date('2026-01-05T10:00:00Z'),
-    updatedAt: new Date('2026-01-05T10:00:00Z'),
-  },
-  {
-    id: 'p3333333-3333-3333-3333-333333333333',
-    sku: 'SP-SED-10',
-    name: 'Sediment Filter Cartridge 10-inch',
-    productType: 'SPARE_PART',
-    brand: 'Kemflo',
-    model: 'KF-SED-10',
-    description: '5-micron spun polypropylene sediment pre-filter',
-    unitPrice: '350.00',
-    taxRatePercent: '18.00',
-    defaultWarrantyMonths: 3,
-    defaultServiceIntervalMonths: 3,
-    isActive: true,
-    createdAt: new Date('2026-01-10T10:00:00Z'),
-    updatedAt: new Date('2026-01-10T10:00:00Z'),
-  },
-];
+const memoryProducts: any[] = [];
 
 export class ProductRepository {
   async findPaginated(filters: ProductQueryFilter, database = db) {

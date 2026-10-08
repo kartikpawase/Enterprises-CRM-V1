@@ -104,10 +104,16 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify) => {
       },
       user?.id
     );
-    return reply.status(201).send({
-      success: true,
+    const isSent = message?.status === 'SENT';
+    const isFailed = message?.status === 'FAILED';
+    return reply.status(isFailed ? 422 : 201).send({
+      success: !isFailed,
       data: message,
-      message: message?.status === 'SENT' ? 'Message sent successfully' : 'Message queued for delivery',
+      message: isSent
+        ? 'Message sent successfully'
+        : isFailed
+        ? (message?.errorMessage || 'WhatsApp message delivery failed')
+        : 'Message queued for delivery',
     });
   });
 
@@ -128,10 +134,16 @@ export const whatsappRoutes: FastifyPluginAsync = async (fastify) => {
       },
       user?.id
     );
-    return reply.status(201).send({
-      success: true,
+    const isSent = message?.status === 'SENT';
+    const isFailed = message?.status === 'FAILED';
+    return reply.status(isFailed ? 422 : 201).send({
+      success: !isFailed,
       data: message,
-      message: 'WhatsApp template sent successfully',
+      message: isSent
+        ? 'WhatsApp template sent successfully'
+        : isFailed
+        ? (message?.errorMessage || 'WhatsApp template delivery failed')
+        : 'WhatsApp template queued for delivery',
     });
   });
 

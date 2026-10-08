@@ -45,6 +45,7 @@ export const JobCardDetailPage: React.FC = () => {
   const [isHoldModalOpen, setIsHoldModalOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [whatsappFeedback, setWhatsappFeedback] = useState<{ type: 'success' | 'error'; message: string; directUrl?: string } | null>(null);
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
 
   const actionMutation = useJobCardActionMutation();
   const notifyWhatsAppMutation = useNotifyTechnicianWhatsAppMutation();
@@ -92,12 +93,14 @@ export const JobCardDetailPage: React.FC = () => {
   };
 
   const handleSendWhatsApp = async () => {
+    if (notifyWhatsAppMutation.isPending || isSendingWhatsApp) return;
+    setIsSendingWhatsApp(true);
     setWhatsappFeedback(null);
     try {
       const res = await notifyWhatsAppMutation.mutateAsync(jobCard.id);
       const resData = (res as any)?.data || res;
       if (res?.success) {
-        const successMsg = res.message || `WhatsApp notification sent to ${jobCard.technicianName || 'technician'}!`;
+        const successMsg = res.message || resData?.message || `WhatsApp notification sent to ${jobCard.technicianName || 'technician'}!`;
         setWhatsappFeedback({
           type: 'success',
           message: successMsg,
@@ -105,7 +108,7 @@ export const JobCardDetailPage: React.FC = () => {
         });
         toast.success(successMsg, 'WhatsApp Sent');
       } else {
-        const errorMsg = res?.message || resData?.error || 'Failed to send WhatsApp notification';
+        const errorMsg = res?.message || resData?.error || resData?.message || 'Failed to send WhatsApp notification';
         setWhatsappFeedback({
           type: 'error',
           message: errorMsg,
@@ -120,6 +123,8 @@ export const JobCardDetailPage: React.FC = () => {
         message: errMsg,
       });
       toast.error(errMsg, 'WhatsApp Failed');
+    } finally {
+      setIsSendingWhatsApp(false);
     }
   };
 
@@ -592,12 +597,12 @@ export const JobCardDetailPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleSendWhatsApp}
-                    disabled={notifyWhatsAppMutation.isPending}
+                    disabled={notifyWhatsAppMutation.isPending || isSendingWhatsApp}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer border border-emerald-700 disabled:opacity-50"
                     title="Send WhatsApp assignment notification to technician"
                   >
                     <Send className="w-3 h-3" />
-                    {notifyWhatsAppMutation.isPending ? 'Sending...' : 'Notify WhatsApp'}
+                    {notifyWhatsAppMutation.isPending || isSendingWhatsApp ? 'Sending...' : 'Notify WhatsApp'}
                   </button>
                 </div>
 

@@ -666,10 +666,10 @@ export const ReportsPage: React.FC = () => {
                     <span>Top Selling Model</span>
                   </div>
                   <div className="text-base font-extrabold text-slate-900 mt-1 truncate">
-                    {realProductsList[0]?.name || overview?.sales?.salesByProduct?.[0]?.productName || 'RO Purifier'}
+                    {realProductsList[0]?.name || overview?.sales?.salesByProduct?.[0]?.productName || 'Standard Equipment'}
                   </div>
                   <div className="text-[11px] text-emerald-600 font-mono mt-0.5">
-                    {realProductsList[0]?.productType ? realProductsList[0].productType.replace(/_/g, ' ') : 'RO Water Purifier'}
+                    {realProductsList[0]?.productType ? realProductsList[0].productType.replace(/_/g, ' ') : 'Equipment'}
                   </div>
                 </div>
 

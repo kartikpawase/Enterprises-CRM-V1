@@ -105,7 +105,7 @@ export class ProductImporter extends BaseImporter {
       const name = this.normalizeString(raw.name || raw['Product Name'] || raw.ProductName);
       const rawType = this.normalizeString(raw.productType || raw.type || raw['Product Type']).toUpperCase();
       const productType = rawType === 'SPARE_PART' ? 'SPARE_PART' : 'RO_MACHINE';
-      const brand = this.normalizeString(raw.brand || raw['Brand']) || 'Kent';
+      const brand = this.normalizeString(raw.brand || raw['Brand']) || 'Generic';
       const model = this.normalizeString(raw.model || raw['Model']);
       const description = this.normalizeString(raw.description || raw['Description']);
       const unitPrice = this.parseSafeNumber(raw.unitPrice || raw.price || raw['Unit Price'] || raw.SellingPrice);
@@ -328,7 +328,7 @@ export class ProductImporter extends BaseImporter {
             sku,
             name,
             productType: raw.productType || 'RO_MACHINE',
-            brand: raw.brand || 'Kent',
+            brand: raw.brand || 'Generic',
             model: raw.model || null,
             description: raw.description || null,
             unitPrice: String(unitPrice),

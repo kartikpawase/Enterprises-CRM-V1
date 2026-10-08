@@ -77,8 +77,31 @@ let sharedWatchId: number | null = null;
 let sharedSocket: Socket | null = null;
 
 export function _resetSharedTrackingStateForTesting() {
+  if (sharedWatchId !== null && typeof navigator !== 'undefined' && typeof navigator.geolocation?.clearWatch === 'function') {
+    try {
+      navigator.geolocation.clearWatch(sharedWatchId);
+    } catch {}
+  }
   sharedWatchId = null;
+  if (sharedSocket) {
+    try {
+      sharedSocket.disconnect();
+    } catch {}
+  }
   sharedSocket = null;
+}
+
+export function stopSharedTechnicianWatch() {
+  if (sharedWatchId !== null && typeof navigator !== 'undefined' && typeof navigator.geolocation?.clearWatch === 'function') {
+    try {
+      navigator.geolocation.clearWatch(sharedWatchId);
+    } catch {}
+    sharedWatchId = null;
+  }
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('technician_current_job_id');
+    localStorage.removeItem('technician_current_job_data');
+  }
 }
 
 const TechnicianTrackingContext = createContext<TechnicianTrackingContextValue | null>(null);
@@ -111,6 +134,30 @@ function useTrackingInternal(currentServiceId?: string, isProvider = false): Tec
           transports: ['websocket', 'polling'],
           auth: { token },
           autoConnect: true,
+        });
+
+        sharedSocket.on('technician:tracking_stopped', () => {
+          if (sharedWatchId !== null && typeof navigator !== 'undefined' && typeof navigator.geolocation?.clearWatch === 'function') {
+            try {
+              navigator.geolocation.clearWatch(sharedWatchId);
+            } catch {}
+            sharedWatchId = null;
+          }
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('technician_current_job_id');
+            localStorage.removeItem('technician_current_job_data');
+          }
+          setState((prev) => ({
+            ...prev,
+            isNavigating: false,
+            activeServiceId: null,
+            trackingStatus: 'NOT_TRACKING',
+            destination: null,
+            distanceText: null,
+            etaText: null,
+            lastUpdate: null,
+            isWatching: false,
+          }));
         });
       } catch (err) {
         console.warn('[TechnicianTracking] Socket init notice:', err);
@@ -151,6 +198,20 @@ function useTrackingInternal(currentServiceId?: string, isProvider = false): Tec
           credentials: 'include',
           body: JSON.stringify(payload),
         });
+        if (res.status === 401) {
+          if (sharedWatchId !== null && typeof navigator !== 'undefined' && typeof navigator.geolocation?.clearWatch === 'function') {
+            try {
+              navigator.geolocation.clearWatch(sharedWatchId);
+            } catch {}
+            sharedWatchId = null;
+          }
+          setState((prev) => ({
+            ...prev,
+            isWatching: false,
+            trackingStatus: 'OFFLINE',
+          }));
+          return;
+        }
         if (res.ok) {
           const json = await res.json();
           if (json.data) {
@@ -176,6 +237,19 @@ function useTrackingInternal(currentServiceId?: string, isProvider = false): Tec
         error: 'Geolocation is not supported by your browser',
       }));
       return;
+    }
+
+    // Immediately acquire and transmit initial location fix if available
+    if (typeof navigator.geolocation.getCurrentPosition === 'function') {
+      try {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            sendLocationPing(pos);
+          },
+          () => {},
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 }
+        );
+      } catch {}
     }
 
     // Section 9: Exactly ONE active watcher per authenticated technician session
@@ -291,7 +365,7 @@ function useTrackingInternal(currentServiceId?: string, isProvider = false): Tec
     });
   }, [sendLocationPing, startBrowserWatch]);
 
-  // Poll server-side active tracking status on initialization
+  // Poll server-side active tracking status on initialization and sync
   const checkActiveTracking = useCallback(async () => {
     try {
       const res = await fetch(resolveApiUrl('/maps/technician/active'), {
@@ -313,24 +387,33 @@ function useTrackingInternal(currentServiceId?: string, isProvider = false): Tec
             error: null,
           }));
 
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('technician_current_job_id', dest.serviceId);
+            localStorage.setItem(
+              'technician_current_job_data',
+              JSON.stringify({
+                id: dest.serviceId,
+                serviceId: dest.serviceId,
+                serviceNumber: dest.serviceNumber,
+                customerName: dest.customerName,
+                customerPhone: dest.customerPhone,
+                serviceAddress: dest.address,
+                status: 'ON_THE_WAY',
+                scheduledTimeSlot: dest.scheduledTimeSlot,
+              })
+            );
+          }
+
           // If tracking was active and no watcher is running, restart watchPosition
           if (sharedWatchId === null && typeof navigator !== 'undefined' && navigator.geolocation) {
             startBrowserWatch(dest.serviceId);
           }
-        } else {
-          setState((prev) => ({
-            ...prev,
-            isNavigating: false,
-            activeServiceId: null,
-            trackingStatus: prev.trackingStatus === 'ON_THE_WAY' ? 'TRACKING_READY' : prev.trackingStatus,
-            destination: null,
-          }));
         }
       }
     } catch {}
   }, [startBrowserWatch]);
 
-  // Sections 6 & 7: Initialize location capability on portal entry
+  // Sections 6 & 7: Check location capability on portal entry without prompting
   useEffect(() => {
     let isMounted = true;
 
@@ -349,11 +432,10 @@ function useTrackingInternal(currentServiceId?: string, isProvider = false): Tec
           if (!isMounted) return;
 
           if (permStatus.state === 'granted') {
-            setState((prev) => ({ ...prev, permissionState: 'granted' }));
+            setState((prev) => ({ ...prev, permissionState: 'granted', error: null }));
             startBrowserWatch();
           } else if (permStatus.state === 'prompt') {
             setState((prev) => ({ ...prev, permissionState: 'prompt' }));
-            // Trigger native prompt
             requestPermission();
           } else if (permStatus.state === 'denied') {
             setState((prev) => ({
@@ -375,19 +457,19 @@ function useTrackingInternal(currentServiceId?: string, isProvider = false): Tec
                 isWatching: false,
                 error: 'Location permission was denied. Please allow location access in your browser settings.',
               }));
-              if (sharedWatchId !== null) {
-                navigator.geolocation.clearWatch(sharedWatchId);
+              if (sharedWatchId !== null && typeof navigator.geolocation?.clearWatch === 'function') {
+                try {
+                  navigator.geolocation.clearWatch(sharedWatchId);
+                } catch {}
                 sharedWatchId = null;
               }
             }
           };
           return;
-        } catch {
-          // Permissions API query not supported in this environment, fallback
-        }
+        } catch {}
       }
 
-      // Fallback: prompt directly via requestPermission
+      // If navigator.permissions is not available (e.g. mobile browsers / webviews)
       requestPermission();
     }
 
@@ -396,21 +478,39 @@ function useTrackingInternal(currentServiceId?: string, isProvider = false): Tec
     }
     checkActiveTracking();
 
-    return () => {
-      isMounted = false;
-      if (!isProvider && sharedWatchId !== null && typeof navigator !== 'undefined' && typeof navigator.geolocation?.clearWatch === 'function') {
-        try {
-          navigator.geolocation.clearWatch(sharedWatchId);
-        } catch {}
-        sharedWatchId = null;
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        checkActiveTracking();
       }
     };
-  }, [isProvider, startBrowserWatch, requestPermission, checkActiveTracking]);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+    const periodicSync = setInterval(checkActiveTracking, 30000);
+
+    return () => {
+      isMounted = false;
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+      clearInterval(periodicSync);
+      // NEVER clear sharedWatchId when child pages or non-provider components unmount!
+    };
+  }, [isProvider, checkActiveTracking]);
 
   // Navigate trigger action
   const handleNavigate = useCallback(
     async (targetServiceId: string, confirmSwitch = false) => {
       setState((prev) => ({ ...prev, error: null }));
+
+      // Step 5: Check/request location permission if needed before initiating navigation
+      let hasPermission = state.permissionState === 'granted';
+      if (!hasPermission) {
+        hasPermission = await requestPermission();
+        if (!hasPermission) {
+          return { success: false, error: 'Location permission is required to start live journey tracking.' };
+        }
+      }
 
       try {
         const res = await fetch(resolveApiUrl('/maps/technician/navigate'), {
@@ -456,6 +556,26 @@ function useTrackingInternal(currentServiceId?: string, isProvider = false): Tec
           error: null,
         }));
 
+        // Synchronize localStorage for portal pages (Dashboard, Services, Detail)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('technician_current_job_id', targetServiceId);
+          if (dest) {
+            localStorage.setItem(
+              'technician_current_job_data',
+              JSON.stringify({
+                id: dest.serviceId,
+                serviceId: dest.serviceId,
+                serviceNumber: dest.serviceNumber,
+                customerName: dest.customerName,
+                customerPhone: dest.customerPhone,
+                serviceAddress: dest.address,
+                status: 'ON_THE_WAY',
+                scheduledTimeSlot: dest.scheduledTimeSlot,
+              })
+            );
+          }
+        }
+
         // Continue/ensure existing browser watch is active (does not duplicate)
         startBrowserWatch(targetServiceId);
 
@@ -471,14 +591,21 @@ function useTrackingInternal(currentServiceId?: string, isProvider = false): Tec
         return { success: false, error: msg };
       }
     },
-    [startBrowserWatch]
+    [state.permissionState, requestPermission, startBrowserWatch]
   );
 
   // Stop tracking action
   const handleStopTracking = useCallback(async () => {
-    if (sharedWatchId !== null && typeof navigator !== 'undefined') {
-      navigator.geolocation.clearWatch(sharedWatchId);
+    if (sharedWatchId !== null && typeof navigator !== 'undefined' && typeof navigator.geolocation?.clearWatch === 'function') {
+      try {
+        navigator.geolocation.clearWatch(sharedWatchId);
+      } catch {}
       sharedWatchId = null;
+    }
+
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('technician_current_job_id');
+      localStorage.removeItem('technician_current_job_data');
     }
 
     try {
@@ -528,13 +655,21 @@ function useTrackingInternal(currentServiceId?: string, isProvider = false): Tec
   };
 }
 
+const TechnicianTrackingRootProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const value = useTrackingInternal(undefined, true);
+  return React.createElement(TechnicianTrackingContext.Provider, { value }, children);
+};
+
 /**
  * Technician Tracking Provider: Mounted at Technician Portal root
  * Ensures exactly ONE controlled active watcher for the technician portal lifecycle
  */
 export const TechnicianTrackingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const value = useTrackingInternal(undefined, true);
-  return React.createElement(TechnicianTrackingContext.Provider, { value }, children);
+  const existingContext = useContext(TechnicianTrackingContext);
+  if (existingContext) {
+    return React.createElement(React.Fragment, null, children);
+  }
+  return React.createElement(TechnicianTrackingRootProvider, null, children);
 };
 
 export function useTechnicianTrackingContext(): TechnicianTrackingContextValue {

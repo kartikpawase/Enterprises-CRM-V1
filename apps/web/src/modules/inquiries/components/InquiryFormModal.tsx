@@ -187,7 +187,7 @@ export const InquiryFormModal: React.FC<InquiryFormModalProps> = ({ isOpen, onCl
 
           <Input
             label="Service Interest"
-            placeholder="e.g. Membrane Replacement / Installation"
+            placeholder="e.g. Equipment Maintenance / Installation"
             value={formData.serviceInterest}
             onChange={(e) => setFormData({ ...formData, serviceInterest: e.target.value })}
           />

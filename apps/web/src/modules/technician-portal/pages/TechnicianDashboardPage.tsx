@@ -17,6 +17,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { TECHNICIAN_SERVICES_ROUTE, TECHNICIAN_COMPLETED_ROUTE } from '@crm/shared';
+import { useTechnicianTracking } from '../hooks/useTechnicianTracking';
 import { apiClient } from '../../../lib/api-client';
 import type {
   TechnicianPersonalSummary,
@@ -25,6 +26,7 @@ import type {
 } from '@crm/types';
 
 export const TechnicianDashboardPage: React.FC = () => {
+  const tracking = useTechnicianTracking();
   const [summary, setSummary] = useState<TechnicianPersonalSummary>({
     assignedCount: 0,
     completedCount: 0,
@@ -122,7 +124,7 @@ export const TechnicianDashboardPage: React.FC = () => {
       // Populate Today's Schedule with live assigned tasks
       setTodayServices(list.filter((s) => s.status !== 'COMPLETED' && s.status !== 'CANCELLED'));
 
-      const currentJobId = typeof window !== 'undefined' ? localStorage.getItem('technician_current_job_id') : null;
+      const currentJobId = tracking.activeServiceId || (typeof window !== 'undefined' ? localStorage.getItem('technician_current_job_id') : null);
 
       // STRICT USER RULE: Only when the technician clicks on navigate, only then that one particular
       // service has to be listed into "current job" section.
@@ -205,7 +207,7 @@ export const TechnicianDashboardPage: React.FC = () => {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('focus', fetchSummary);
     };
-  }, []);
+  }, [tracking.activeServiceId, tracking.isNavigating]);
 
   return (
     <div className="space-y-6">

@@ -122,9 +122,8 @@ describe('Chatbot Unit Test Suite', () => {
     }
   });
 
-  it('5. Safe fallback answer contains official SR Enterprises contact coordinates', () => {
-    expect(SAFE_FALLBACK_ANSWER).toContain('SR Enterprises');
-    expect(SAFE_FALLBACK_ANSWER).toContain('+91 73850 59197');
-    expect(SAFE_FALLBACK_ANSWER).toContain('srenterprises02015@gmail.com');
+  it('5. Safe fallback answer contains official customer support message', () => {
+    expect(SAFE_FALLBACK_ANSWER).toContain('Enterprises CRM');
+    expect(SAFE_FALLBACK_ANSWER).toContain('customer support');
   });
 });

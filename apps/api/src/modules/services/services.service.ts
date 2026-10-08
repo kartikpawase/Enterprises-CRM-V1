@@ -269,45 +269,19 @@ export class ServicesService {
     const { whatsappService } = await import('../whatsapp/whatsapp.service');
 
     if (jobCardId) {
-      const res = await whatsappService.notifyTechnicianJobAssignment(jobCardId, {
+      return whatsappService.notifyTechnicianJobAssignment(jobCardId, {
         forceResend: true,
         actorUserId: actorId,
       });
-      if (res.success) {
-        return res;
-      }
     }
 
     const { jobCardsRepository } = await import('../job-cards/job-cards.repository');
     const linkedCard = await jobCardsRepository.findByServiceId(serviceId);
     if (linkedCard) {
-      const res = await whatsappService.notifyTechnicianJobAssignment(linkedCard.id, {
+      return whatsappService.notifyTechnicianJobAssignment(linkedCard.id, {
         forceResend: true,
         actorUserId: actorId,
       });
-      if (res.success) {
-        return res;
-      }
-    }
-
-    const linkedCards = await jobCardsRepository.findPaginated({
-      page: 1,
-      limit: 50,
-      search: service.serviceNumber,
-      status: 'ALL',
-      priority: 'ALL',
-      sortBy: 'createdAt',
-      sortOrder: 'desc',
-    });
-    const match = linkedCards.data.find((jc: any) => jc.serviceId === serviceId) || linkedCards.data[0];
-    if (match) {
-      const res = await whatsappService.notifyTechnicianJobAssignment(match.id, {
-        forceResend: true,
-        actorUserId: actorId,
-      });
-      if (res.success) {
-        return res;
-      }
     }
 
     // Direct fallback from authoritative service record

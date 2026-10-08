@@ -41,14 +41,14 @@ export const SystemSettingsSchema = z.object({
 
 export const BusinessSettingsSchema = z.object({
   businessName: z.string().min(1).max(150),
-  legalName: z.string().min(1).max(200),
-  address: z.string().min(1).max(300),
-  city: z.string().min(1).max(100),
-  state: z.string().min(1).max(100),
-  postalCode: z.string().regex(/^\d{6}$/, 'Postal code must be 6 digits'),
-  country: z.string().min(1).max(100),
-  phone: z.string().regex(/^\d{10}$/, 'Phone must be a valid 10-digit number'),
-  email: z.string().email(),
+  legalName: z.string().max(200).optional().or(z.literal('')),
+  address: z.string().max(300).optional().or(z.literal('')),
+  city: z.string().max(100).optional().or(z.literal('')),
+  state: z.string().max(100).optional().or(z.literal('')),
+  postalCode: z.string().regex(/^\d{6}$/, 'Postal code must be 6 digits').optional().or(z.literal('')),
+  country: z.string().max(100).optional().or(z.literal('')),
+  phone: z.string().regex(/^\d{10}$/, 'Phone must be a valid 10-digit number').optional().or(z.literal('')),
+  email: z.string().email().optional().or(z.literal('')),
   website: z.string().url().optional().or(z.literal('')),
   gstin: z.string().regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, 'Invalid GSTIN format').optional().or(z.literal('')),
   panNumber: z.string().regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'Invalid PAN format').optional().or(z.literal('')),
@@ -184,17 +184,17 @@ export const SYSTEM_DEFAULTS: Record<SettingsCategory, any> = {
 
   BUSINESS: {
     businessName: 'Enterprises CRM',
-    legalName: 'Enterprises CRM Services',
-    address: 'Shop 4, Om Heights, Baner Road',
-    city: 'Pune',
-    state: 'Maharashtra',
-    postalCode: '411045',
+    legalName: 'Enterprises CRM',
+    address: '',
+    city: '',
+    state: '',
+    postalCode: '',
     country: 'India',
-    phone: '7385059197',
-    email: 'srenterprises02015@gmail.com',
-    website: 'https://enterprisescrm.com',
-    gstin: '27AAAAA0000A1Z5',
-    panNumber: 'AAAAA0000A',
+    phone: '',
+    email: '',
+    website: '',
+    gstin: '',
+    panNumber: '',
     logoUrl: '',
   } as BusinessSettings,
 
@@ -202,8 +202,8 @@ export const SYSTEM_DEFAULTS: Record<SettingsCategory, any> = {
     taxEnabled: true,
     defaultTaxRatePercent: 18.00,
     taxInclusivePricing: false,
-    taxNumber: '27AAAAA0000A1Z5',
-    defaultHsnSac: '84212190',
+    taxNumber: '',
+    defaultHsnSac: '9987',
   } as TaxSettings,
 
   INVOICE: {
@@ -488,6 +488,13 @@ export class ConfigurationService {
       cachedAt: now,
     });
     return defaultValue as T;
+  }
+
+  /**
+   * Retrieves business settings configuration
+   */
+  public async getBusinessSettings(clientOrTx?: any): Promise<BusinessSettings> {
+    return this.get<BusinessSettings>('BUSINESS', clientOrTx);
   }
 
   /**
@@ -782,3 +789,4 @@ export class ConfigurationService {
 }
 
 export const configService = ConfigurationService.getInstance();
+export const configurationService = configService;

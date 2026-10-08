@@ -77,7 +77,7 @@ export async function startServer() {
       console.warn('⚠️ Warning: Maps Socket.IO initialization notice:', socketErr);
     }
 
-    console.log(`\n🚀 SR Enterprises CRM API running at: ${address}`);
+    console.log(`\n🚀 Enterprises CRM API running at: ${address}`);
     console.log(`📋 Health check: ${address}/health`);
     console.log(`📋 Readiness probe: ${address}/ready`);
     console.log(`🔗 API v1 root: ${address}/api/v1\n`);

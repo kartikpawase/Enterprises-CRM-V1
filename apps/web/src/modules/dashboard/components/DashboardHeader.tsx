@@ -100,7 +100,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
               <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-dropdown border border-slate-200/90 z-50 p-2 animate-in fade-in slide-in-from-top-2 duration-150">
                 <div className="px-3 py-2 border-b border-slate-100 mb-1">
                   <p className="text-xs font-bold text-slate-900">{user?.displayName || 'Administrator'}</p>
-                  <p className="text-[11px] text-slate-500 font-mono">{user?.email || 'admin@srenterprises.com'}</p>
+                  <p className="text-[11px] text-slate-500 font-mono">{user?.email || 'admin@enterprisescrm.local'}</p>
                 </div>
                 <button
                   type="button"

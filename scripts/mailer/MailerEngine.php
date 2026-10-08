@@ -68,13 +68,13 @@ class MailerEngine {
 
         $smtpHost = getenv('SMTP_HOST') ?: getenv('MAIL_HOST') ?: $_ENV['SMTP_HOST'] ?? $_ENV['MAIL_HOST'] ?? $_SERVER['SMTP_HOST'] ?? $_SERVER['MAIL_HOST'] ?? 'smtp.gmail.com';
         $smtpPort = (int)(getenv('SMTP_PORT') ?: getenv('MAIL_PORT') ?: $_ENV['SMTP_PORT'] ?? $_ENV['MAIL_PORT'] ?? $_SERVER['SMTP_PORT'] ?? $_SERVER['MAIL_PORT'] ?? 465);
-        $smtpUser = getenv('SMTP_USER') ?: getenv('SMTP_USERNAME') ?: getenv('MAIL_USERNAME') ?: $_ENV['SMTP_USER'] ?? $_ENV['SMTP_USERNAME'] ?? $_ENV['MAIL_USERNAME'] ?? $_SERVER['SMTP_USER'] ?? $_SERVER['SMTP_USERNAME'] ?? $_SERVER['MAIL_USERNAME'] ?? 'srenterprises02015@gmail.com';
+        $smtpUser = getenv('SMTP_USER') ?: getenv('SMTP_USERNAME') ?: getenv('MAIL_USERNAME') ?: $_ENV['SMTP_USER'] ?? $_ENV['SMTP_USERNAME'] ?? $_ENV['MAIL_USERNAME'] ?? $_SERVER['SMTP_USER'] ?? $_SERVER['SMTP_USERNAME'] ?? $_SERVER['MAIL_USERNAME'] ?? 'notifications@enterprisescrm.local';
         $smtpPass = str_replace(' ', '', (getenv('SMTP_PASS') ?: getenv('SMTP_PASSWORD') ?: getenv('MAIL_PASSWORD') ?: getenv('GMAIL_APP_PASSWORD') ?: $_ENV['SMTP_PASS'] ?? $_ENV['SMTP_PASSWORD'] ?? $_ENV['MAIL_PASSWORD'] ?? $_ENV['GMAIL_APP_PASSWORD'] ?? $_SERVER['SMTP_PASS'] ?? $_SERVER['SMTP_PASSWORD'] ?? $_SERVER['MAIL_PASSWORD'] ?? $_SERVER['GMAIL_APP_PASSWORD'] ?? ''));
         $smtpSecure = strtolower(getenv('SMTP_SECURE') ?: getenv('MAIL_ENCRYPTION') ?: $_ENV['SMTP_SECURE'] ?? $_ENV['MAIL_ENCRYPTION'] ?? $_SERVER['SMTP_SECURE'] ?? $_SERVER['MAIL_ENCRYPTION'] ?? ($smtpPort === 465 ? 'ssl' : 'tls'));
         
-        $fromEmail = getenv('SMTP_FROM_EMAIL') ?: getenv('SMTP_FROM') ?: getenv('MAIL_FROM_ADDRESS') ?: ($smtpUser ?: 'srenterprises02015@gmail.com');
+        $fromEmail = getenv('SMTP_FROM_EMAIL') ?: getenv('SMTP_FROM') ?: getenv('MAIL_FROM_ADDRESS') ?: ($smtpUser ?: 'notifications@enterprisescrm.local');
         $fromName = getenv('SMTP_FROM_NAME') ?: getenv('MAIL_FROM_NAME') ?: 'Enterprises CRM';
-        $supportEmail = getenv('SUPPORT_EMAIL') ?: ($smtpUser ?: 'srenterprises02015@gmail.com');
+        $supportEmail = getenv('SUPPORT_EMAIL') ?: ($smtpUser ?: 'support@enterprisescrm.local');
 
         // Optional server-side secure SMTP debug logging
         if (filter_var(getenv('SMTP_DEBUG') ?: false, FILTER_VALIDATE_BOOLEAN)) {
@@ -187,7 +187,7 @@ class MailerEngine {
         $mailDriver = strtolower(getenv('MAIL_DRIVER') ?: '');
         $isMock = ($mailDriver === 'log' || $mailDriver === 'mock' || getenv('MOCK_MAIL') === 'true' || (!empty($payload['mock']) && $payload['mock'] === true));
         $smtpHost = getenv('SMTP_HOST') ?: getenv('MAIL_HOST') ?: $_ENV['SMTP_HOST'] ?? $_ENV['MAIL_HOST'] ?? $_SERVER['SMTP_HOST'] ?? $_SERVER['MAIL_HOST'] ?? 'smtp.gmail.com';
-        $smtpUser = getenv('SMTP_USER') ?: getenv('SMTP_USERNAME') ?: getenv('MAIL_USERNAME') ?: $_ENV['SMTP_USER'] ?? $_ENV['SMTP_USERNAME'] ?? $_ENV['MAIL_USERNAME'] ?? $_SERVER['SMTP_USER'] ?? $_SERVER['SMTP_USERNAME'] ?? $_SERVER['MAIL_USERNAME'] ?? 'srenterprises02015@gmail.com';
+        $smtpUser = getenv('SMTP_USER') ?: getenv('SMTP_USERNAME') ?: getenv('MAIL_USERNAME') ?: $_ENV['SMTP_USER'] ?? $_ENV['SMTP_USERNAME'] ?? $_ENV['MAIL_USERNAME'] ?? $_SERVER['SMTP_USER'] ?? $_SERVER['SMTP_USERNAME'] ?? $_SERVER['MAIL_USERNAME'] ?? 'notifications@enterprisescrm.local';
         $smtpPass = str_replace(' ', '', (getenv('SMTP_PASS') ?: getenv('SMTP_PASSWORD') ?: getenv('MAIL_PASSWORD') ?: getenv('GMAIL_APP_PASSWORD') ?: $_ENV['SMTP_PASS'] ?? $_ENV['SMTP_PASSWORD'] ?? $_ENV['MAIL_PASSWORD'] ?? $_ENV['GMAIL_APP_PASSWORD'] ?? $_SERVER['SMTP_PASS'] ?? $_SERVER['SMTP_PASSWORD'] ?? $_SERVER['MAIL_PASSWORD'] ?? $_SERVER['GMAIL_APP_PASSWORD'] ?? ''));
 
         try {
@@ -346,7 +346,7 @@ class MailerEngine {
         // Shared metadata variables
         $companyName = getenv('COMPANY_NAME') ?: 'Enterprises CRM';
         $supportPhone = getenv('SUPPORT_PHONE') ?: '+91 98200 11223';
-        $supportEmail = getenv('SUPPORT_EMAIL') ?: 'support@srenterprises.com';
+        $supportEmail = getenv('SUPPORT_EMAIL') ?: 'support@enterprisescrm.local';
         $upiId = getenv('UPI_ID') ?: 'enterprises.crm@upi';
 
         // Extract variables for template rendering

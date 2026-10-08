@@ -180,6 +180,39 @@ const TechnicianPortalLayoutContent: React.FC = () => {
         </div>
       </header>
 
+      {/* Active Navigation / Live Tracking Banner */}
+      {tracking.isNavigating && tracking.destination && (
+        <div className="bg-emerald-600 text-white px-4 py-2.5 sm:px-6 shadow-xs flex items-center justify-between gap-3 text-xs animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-200 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white" />
+            </span>
+            <div className="truncate">
+              <span className="font-bold uppercase tracking-wider text-[10px] bg-emerald-700 px-2 py-0.5 rounded-full mr-2">
+                Live Journey Active
+              </span>
+              <span className="font-semibold text-white">
+                Traveling to {tracking.destination.customerName}
+              </span>
+              {tracking.distanceText && (
+                <span className="text-emerald-100 hidden sm:inline ml-1.5">
+                  ({tracking.distanceText} remaining{tracking.etaText ? ` · ETA: ${tracking.etaText}` : ''})
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              to={`/technician/services/${tracking.destination.serviceId}`}
+              className="px-3 py-1 bg-white text-emerald-800 hover:bg-emerald-50 active:bg-emerald-100 font-bold rounded-lg text-xs transition-colors shadow-2xs"
+            >
+              Active Job
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Geolocation Permission Banner: Handled when permission is denied */}
       {tracking.permissionState === 'denied' && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 sm:px-6">

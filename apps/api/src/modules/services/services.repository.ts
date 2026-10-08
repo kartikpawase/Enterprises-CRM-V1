@@ -158,9 +158,9 @@ export class ServicesRepository {
             assetId: customerAssets.id,
             assetNumber: customerAssets.assetNumber,
             serialNumber: customerAssets.serialNumber,
-            productName: sql<string>`COALESCE(${customerAssets.customName}, ${products.name}, 'RO Machine')`,
-            productBrand: sql<string>`COALESCE(${products.brand}, 'SR Enterprises')`,
-            productSku: sql<string>`COALESCE(${products.sku}, 'SKU-RO')`,
+            productName: sql<string>`COALESCE(${customerAssets.customName}, ${products.name}, 'Equipment')`,
+            productBrand: sql<string>`COALESCE(${products.brand}, 'Standard')`,
+            productSku: sql<string>`COALESCE(${products.sku}, 'SKU-GEN')`,
             technicianId: technicians.id,
             technicianName: technicians.fullName,
             technicianPhone: technicians.phone,
@@ -442,9 +442,9 @@ export class ServicesRepository {
           assetId: customerAssets.id,
           assetNumber: customerAssets.assetNumber,
           serialNumber: customerAssets.serialNumber,
-          productName: sql<string>`COALESCE(${customerAssets.customName}, ${products.name}, 'RO Machine')`,
-          productBrand: sql<string>`COALESCE(${products.brand}, 'SR Enterprises')`,
-          productSku: sql<string>`COALESCE(${products.sku}, 'SKU-RO')`,
+          productName: sql<string>`COALESCE(${customerAssets.customName}, ${products.name}, 'Equipment')`,
+          productBrand: sql<string>`COALESCE(${products.brand}, 'Standard')`,
+          productSku: sql<string>`COALESCE(${products.sku}, 'SKU-GEN')`,
           technicianId: technicians.id,
           technicianName: technicians.fullName,
           technicianPhone: technicians.phone,
@@ -493,7 +493,7 @@ export class ServicesRepository {
 
         return {
           ...mem,
-          productName: asset?.customName || asset?.productName || 'RO Machine',
+          productName: asset?.customName || asset?.productName || 'Equipment',
           serialNumber: asset?.serialNumber || '',
           invoice: memInv
             ? {
@@ -647,7 +647,7 @@ export class ServicesRepository {
         ...mem,
         technicianName: techName,
         technicianPhone: techPhone,
-        productName: asset?.customName || asset?.productName || 'RO Machine',
+        productName: asset?.customName || asset?.productName || 'Equipment',
         serialNumber: asset?.serialNumber || '',
         invoice: memInv
           ? {
@@ -979,10 +979,11 @@ export class ServicesRepository {
           resolvedAsset = matched;
           finalAssetId = matched.id;
         } else {
-          // If customer has a placeholder asset (e.g. "Customer RO Water Purifier", "RO Machine", or null), update its name
+          // If customer has a placeholder asset (e.g. "Equipment", "Customer Equipment", or null), update its name
           const placeholderAsset = custAssets.find(
             (ca) =>
               !ca.customName ||
+              ca.customName.toLowerCase() === 'equipment' ||
               ca.customName.toLowerCase() === 'customer ro water purifier' ||
               ca.customName.toLowerCase() === 'ro machine'
           );
@@ -1131,11 +1132,11 @@ export class ServicesRepository {
             const [newProd] = await db
               .insert(products)
               .values({
-                name: 'Commercial RO Water Purifier 100 GPD',
-                sku: 'RO-COMM-100',
+                name: 'Standard Commercial Equipment',
+                sku: 'EQP-COMM-100',
                 productType: 'RO_MACHINE',
-                brand: 'AquaPure',
-                model: 'AP-100C',
+                brand: 'Standard',
+                model: 'STD-100',
                 unitPrice: '15000.00',
                 taxRatePercent: '18.00',
                 defaultWarrantyMonths: 12,
@@ -1154,7 +1155,7 @@ export class ServicesRepository {
               assetNumber: assetSeq.sequenceNumber,
               customerId: customerId,
               productId: defaultProduct.id,
-              customName: requestedMachineName || 'RO Machine',
+              customName: requestedMachineName || 'Equipment',
               assetType: 'RO_MACHINE',
               status: 'ACTIVE',
               purchaseDate: new Date(),
@@ -1170,7 +1171,7 @@ export class ServicesRepository {
             assetNumber: `AST-${Date.now().toString().slice(-4)}`,
             customerId: customerId,
             productId: '00000000-0000-0000-0000-000000000001',
-            customName: requestedMachineName || 'RO Machine',
+            customName: requestedMachineName || 'Equipment',
             assetType: 'RO_MACHINE',
             status: 'ACTIVE',
             purchaseDate: new Date(),

@@ -228,6 +228,8 @@ export function useCompleteJobCardMutation() {
       queryClient.invalidateQueries({ queryKey: ['job-card', variables.id] });
       queryClient.invalidateQueries({ queryKey: ['services'] });
       queryClient.invalidateQueries({ queryKey: ['technicians'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
     },
   });
 }
@@ -239,10 +241,17 @@ export function useNotifyTechnicianWhatsAppMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (jobCardId: string) => {
-      const response = await apiClient.post<{ success: boolean; message: string; data?: any }>(
+      const response = await apiClient.post<any>(
         `/job-cards/${jobCardId}/notify-technician`
       );
-      return response.data;
+      const data = response?.data || response;
+      if (response && 'success' in response && typeof data === 'object') {
+        data.success = response.success;
+        if ((response as any).message && !data.message) {
+          data.message = (response as any).message;
+        }
+      }
+      return data;
     },
     onSuccess: (_, jobCardId) => {
       queryClient.invalidateQueries({ queryKey: ['job-card', jobCardId] });

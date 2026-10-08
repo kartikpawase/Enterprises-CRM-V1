@@ -22,7 +22,7 @@ export const ProductPerformanceSection: React.FC<ProductPerformanceSectionProps>
   if (topProducts.length > 0) {
     items = topProducts.map((prod, idx) => ({
       rank: idx + 1,
-      name: prod.productName || 'RO Purifier',
+      name: prod.productName || 'Equipment',
       category: prod.category || 'Equipment',
       unitsSold: prod.unitsSold || 0,
       revenue: formatCurrency(prod.revenue || 0),

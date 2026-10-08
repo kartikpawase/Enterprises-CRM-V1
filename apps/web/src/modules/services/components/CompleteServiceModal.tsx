@@ -27,21 +27,12 @@ export const CompleteServiceModal: React.FC<CompleteServiceModalProps> = ({
   onClose,
   service,
 }) => {
-  const [workPerformed, setWorkPerformed] = useState('Periodic filter replacement and TDS calibration');
-  const [diagnosis, setDiagnosis] = useState('Standard wear & tear on pre-carbon filter. Membrane healthy.');
-  const [technicianNotes, setTechnicianNotes] = useState('All seals checked. No leakage found.');
-  const [customerRemarks, setCustomerRemarks] = useState('Satisfied with water flow and taste.');
-  const [laborCharges, setLaborCharges] = useState<number>(service?.serviceClassification === 'WARRANTY' ? 0 : 350);
-  const [parts, setParts] = useState<JobCardPartItem[]>([
-    {
-      partName: 'Sediment Filter 10"',
-      partSku: 'FLT-SED-10',
-      quantity: 1,
-      unitPrice: service?.serviceClassification === 'WARRANTY' ? 0 : 250,
-      isWarrantyCovered: service?.serviceClassification === 'WARRANTY',
-      totalPrice: service?.serviceClassification === 'WARRANTY' ? 0 : 250,
-    },
-  ]);
+  const [workPerformed, setWorkPerformed] = useState('');
+  const [diagnosis, setDiagnosis] = useState('');
+  const [technicianNotes, setTechnicianNotes] = useState('');
+  const [customerRemarks, setCustomerRemarks] = useState('');
+  const [laborCharges, setLaborCharges] = useState<number>(0);
+  const [parts, setParts] = useState<JobCardPartItem[]>([]);
 
   const [scheduleNextService, setScheduleNextService] = useState(false);
   const [recommendationMonths, setRecommendationMonths] = useState(3);
@@ -186,7 +177,7 @@ export const CompleteServiceModal: React.FC<CompleteServiceModalProps> = ({
           <Input
             value={workPerformed}
             onChange={(e) => setWorkPerformed(e.target.value)}
-            placeholder="e.g. Replaced sediment filter, cleaned housing, verified TDS at 75 ppm"
+            placeholder="e.g. Completed maintenance inspection and routine service"
           />
         </div>
 
@@ -195,7 +186,7 @@ export const CompleteServiceModal: React.FC<CompleteServiceModalProps> = ({
           <Input
             value={diagnosis}
             onChange={(e) => setDiagnosis(e.target.value)}
-            placeholder="e.g. Sediment filter clogged due to high turbidity in municipal line"
+            placeholder="e.g. Regular component wear or operational diagnosis"
           />
         </div>
 
@@ -232,16 +223,23 @@ export const CompleteServiceModal: React.FC<CompleteServiceModalProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {parts.map((p, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50">
-                    <td className="p-2 pl-3">
-                      <Input
-                        value={p.partName}
-                        onChange={(e) => handlePartChange(idx, 'partName', e.target.value)}
-                        placeholder="e.g. Sediment Filter"
-                        className="h-8 text-xs"
-                      />
+                {parts.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-4 text-center text-slate-400">
+                      No spare parts recorded. Click "Add Part" if replacement components were used.
                     </td>
+                  </tr>
+                ) : (
+                  parts.map((p, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50/50">
+                      <td className="p-2 pl-3">
+                        <Input
+                          value={p.partName}
+                          onChange={(e) => handlePartChange(idx, 'partName', e.target.value)}
+                          placeholder="e.g. Replacement Part"
+                          className="h-8 text-xs"
+                        />
+                      </td>
                     <td className="p-2">
                       <Input
                         value={p.partSku}
@@ -289,7 +287,8 @@ export const CompleteServiceModal: React.FC<CompleteServiceModalProps> = ({
                       </button>
                     </td>
                   </tr>
-                ))}
+                ))
+              )}
               </tbody>
             </table>
           </div>

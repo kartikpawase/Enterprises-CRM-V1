@@ -28,18 +28,18 @@ const FALLBACK_TEMPLATES: WhatsAppTemplateDefinition[] = [
     name: 'service_scheduled',
     category: 'UTILITY',
     language: 'en_US',
-    description: 'Notification when RO service appointment is booked',
+    description: 'Notification when equipment service appointment is booked',
     parameterKeys: ['customer_name', 'product_name', 'schedule_date', 'technician_name'],
-    sampleText: 'Dear Rahul, your RO service has been scheduled on tomorrow.',
+    sampleText: 'Dear Rahul, your equipment service has been scheduled for tomorrow.',
   },
   {
     id: 'tpl-003',
     name: 'job_completed',
     category: 'UTILITY',
     language: 'en_US',
-    description: 'Service completion notification with final TDS readings',
-    parameterKeys: ['customer_name', 'product_name', 'job_number', 'final_tds'],
-    sampleText: 'Hi Rahul, service for Kent Grand Plus is completed under Job Card #JOB-001.',
+    description: 'Service completion notification with job summary',
+    parameterKeys: ['customer_name', 'product_name', 'job_number'],
+    sampleText: 'Hi Rahul, service for your Equipment is completed under Job Card #JOB-001.',
   },
   {
     id: 'tpl-004',
@@ -55,9 +55,9 @@ const FALLBACK_TEMPLATES: WhatsAppTemplateDefinition[] = [
     name: 'warranty_expiry_notice',
     category: 'MARKETING',
     language: 'en_US',
-    description: 'AMC renewal prompt before warranty expiration',
+    description: 'Contract renewal prompt before warranty expiration',
     parameterKeys: ['customer_name', 'product_name', 'serial_number', 'expiry_date'],
-    sampleText: 'Hello Rahul, the warranty for your RO expires on 31 Dec 2026.',
+    sampleText: 'Hello Rahul, the warranty for your equipment expires on 31 Dec 2026.',
   },
 ];
 
@@ -160,11 +160,15 @@ export function useSendWhatsAppTextMessage() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (payload: SendWhatsAppTextMessageDto) => {
-      const response = await apiClient.post<{ success: boolean; data: WhatsAppMessage }>(
+      const response = await apiClient.post<any>(
         '/whatsapp/messages',
         payload
       );
-      return response.data;
+      const resData = response?.data || response;
+      if (response && 'success' in response && response.success === false) {
+        throw new Error((response as any).message || resData?.errorMessage || 'Failed to send WhatsApp message');
+      }
+      return resData;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['whatsapp', 'conversations'] });
@@ -181,11 +185,15 @@ export function useSendWhatsAppTemplateMessage() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (payload: SendWhatsAppTemplateMessageDto) => {
-      const response = await apiClient.post<{ success: boolean; data: WhatsAppMessage }>(
+      const response = await apiClient.post<any>(
         '/whatsapp/send-template',
         payload
       );
-      return response.data;
+      const resData = response?.data || response;
+      if (response && 'success' in response && response.success === false) {
+        throw new Error((response as any).message || resData?.errorMessage || 'Failed to dispatch WhatsApp template');
+      }
+      return resData;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['whatsapp', 'conversations'] });

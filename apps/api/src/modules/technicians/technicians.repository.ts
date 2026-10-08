@@ -280,7 +280,7 @@ export class TechniciansRepository {
               serviceType: j.serviceType || 'GENERAL_SERVICE',
               customerName: j.customerName || 'Customer',
               customerPhone: j.customerPhone || '',
-              productName: j.productName || 'Water Purifier',
+              productName: j.productName || 'Equipment',
             }));
         }
 
@@ -312,7 +312,7 @@ export class TechniciansRepository {
         serviceType: j.serviceType || 'GENERAL_SERVICE',
         customerName: j.customerName || 'Customer',
         customerPhone: j.customerPhone || '',
-        productName: j.productName || 'Water Purifier',
+        productName: j.productName || 'Equipment',
       }));
 
     return {
@@ -438,10 +438,10 @@ export class TechniciansRepository {
             customerEmail: s.customerEmail || null,
             customerAddress: s.customerAddress || null,
             assetId: s.assetId,
-            assetCustomName: s.machineName || s.customName || 'RO Machine',
+            assetCustomName: s.machineName || s.customName || 'Equipment',
             assetSerialNumber: null,
             assetModelNumber: null,
-            productName: s.productName || 'RO Machine',
+            productName: s.productName || 'Equipment',
             productBrand: null,
             serviceType: s.serviceType,
             serviceLocation: s.serviceLocation || 'DOORSTEP',
@@ -517,8 +517,8 @@ export class TechniciansRepository {
             customerName: j.customerName || 'Customer',
             customerPhone: j.customerPhone || '',
             assetId: j.assetId,
-            assetCustomName: j.productName || 'RO Machine',
-            productName: j.productName || 'RO Machine',
+            assetCustomName: j.productName || 'Equipment',
+            productName: j.productName || 'Equipment',
             problemReported: j.problemReported,
             diagnosis: j.diagnosis,
             workPerformed: j.workPerformed,
@@ -637,11 +637,7 @@ export class TechniciansRepository {
 
     // Helper for clean machine name resolution
     const resolveMachineName = (row: any) => {
-      const raw = row.assetCustomName || row.productName || 'Machine';
-      if (raw === 'Customer RO Water Purifier' || raw === 'RO Machine') {
-        return row.productName && row.productName !== 'RO Machine' ? row.productName : raw;
-      }
-      return raw;
+      return row.assetCustomName || row.productName || 'Equipment';
     };
 
     // Format Assigned Services

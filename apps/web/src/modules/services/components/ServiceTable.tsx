@@ -213,15 +213,15 @@ export const ServiceTable: React.FC<ServiceTableProps> = ({
     },
     {
       key: 'asset',
-      header: 'Machine / Asset',
+      header: 'Equipment / Asset',
       render: (row: ServiceItem) => {
         const rawName = row.productName || (row as any).customName || (row as any).customAssetName;
         const displayName =
-          rawName && rawName.toLowerCase() !== 'customer ro water purifier'
+          rawName && rawName.toLowerCase() !== 'customer ro water purifier' && rawName.toLowerCase() !== 'ro machine'
             ? rawName
             : row.productBrand
-            ? `${row.productBrand} RO System`
-            : 'RO Machine';
+            ? `${row.productBrand} Equipment`
+            : 'Equipment';
 
         return (
           <div>

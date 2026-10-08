@@ -81,7 +81,7 @@ export const SalesDirectory: React.FC = () => {
     const rows = sales.map((s) => [
       s.invoice?.invoiceNumber || s.saleNumber,
       `"${s.customerName.replace(/"/g, '""')}"`,
-      'Kent Grand Plus',
+      `"${((s as any).items && (s as any).items.length > 0 ? (s as any).items.map((i: any) => i.productNameSnapshot).join('; ') : 'Equipment').replace(/"/g, '""')}"`,
       s.totalAmount,
       s.status,
       s.invoice?.status || 'PENDING',

@@ -144,7 +144,7 @@ export class TechnicianBillingService {
       success: true,
       data: {
         ...billing,
-        businessName: businessSettings.businessName || 'SR Enterprises',
+        businessName: businessSettings.businessName || 'Enterprises CRM',
         upiId: businessSettings.upiId || null,
         upiQr: businessSettings.upiQr || null,
         accountName: businessSettings.accountName || null,

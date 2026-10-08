@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { TechnicianAuthGuard } from './guards/TechnicianAuthGuard';
 import { TechnicianPortalLayout } from './layouts/TechnicianPortalLayout';
+import { TechnicianTrackingProvider } from './hooks/useTechnicianTracking';
 import { TechnicianLoginPage } from './pages/TechnicianLoginPage';
 import { TechnicianDashboardPage } from './pages/TechnicianDashboardPage';
 import { TechnicianServicesPage } from './pages/TechnicianServicesPage';
@@ -42,7 +43,9 @@ export const TechnicianPortalRouter: React.FC = () => {
         <Route
           element={
             <TechnicianAuthGuard>
-              <TechnicianPortalLayout />
+              <TechnicianTrackingProvider>
+                <TechnicianPortalLayout />
+              </TechnicianTrackingProvider>
             </TechnicianAuthGuard>
           }
         >

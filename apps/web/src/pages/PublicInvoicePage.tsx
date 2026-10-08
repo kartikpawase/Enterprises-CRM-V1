@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { apiClient } from '../lib/api-client';
 import { cn } from '../lib/utils';
 import { CRM_OFFICIAL_LOGO_B64, OFFICIAL_LOWER_SECTION_B64 } from '../assets/invoiceAssets';
@@ -14,6 +14,7 @@ import {
   Building2,
   QrCode,
 } from 'lucide-react';
+import { RevampInvoiceView } from '../components/invoices/RevampInvoiceView';
 
 interface PublicInvoiceData {
   id: string;
@@ -125,11 +126,18 @@ export const PublicInvoicePage: React.FC = () => {
           </p>
           <div className="pt-4 border-t border-slate-100 flex flex-col gap-2">
             <a
-              href="tel:+917385059197"
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors"
+              href="tel:"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors"
             >
-              <Phone className="w-4 h-4" /> Call Enterprises CRM (+91 7385059197)
+              <Phone className="w-4 h-4" />
+              Call Enterprises CRM
             </a>
+            <Link
+              to="/"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold rounded-xl transition-colors"
+            >
+              Return to Home
+            </Link>
           </div>
         </div>
       </div>
@@ -160,6 +168,9 @@ export const PublicInvoicePage: React.FC = () => {
   const poNumber = invoice.poNumber || '';
   const noteText = invoice.notes ? String(invoice.notes).trim() : '';
 
+  const biz = (invoice as any)?.businessDetails;
+  const bizPhone = biz?.phone || '';
+
   return (
     <div className="min-h-screen bg-slate-100 py-6 sm:py-10 px-2 sm:px-4 text-slate-900 font-sans print:bg-white print:p-0">
       <div className="max-w-4xl mx-auto space-y-4">
@@ -188,12 +199,14 @@ export const PublicInvoicePage: React.FC = () => {
             >
               <Printer className="w-4 h-4" /> Print / Save PDF
             </button>
-            <a
-              href="tel:+917385059197"
-              className="inline-flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-200 text-xs font-bold transition-all shadow-xs cursor-pointer"
-            >
-              <Phone className="w-4 h-4 text-slate-500" /> Help: 7385059197
-            </a>
+            {bizPhone ? (
+              <a
+                href={`tel:${bizPhone}`}
+                className="inline-flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-200 text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                <Phone className="w-4 h-4 text-slate-500" /> Help: {bizPhone}
+              </a>
+            ) : null}
           </div>
         </div>
 
@@ -242,8 +255,13 @@ export const PublicInvoicePage: React.FC = () => {
           )}
         </div>
 
-        {/* Printable SR ENTERPRISES Invoice / Bill of Supply */}
-        <div className="overflow-x-auto pb-2 -mx-1 sm:mx-0 print:overflow-visible print:m-0 print:p-0">
+        {/* Revamp Invoice for Service/JobCard Invoices OR Enterprises CRM Printable Invoice */}
+        {Boolean((invoice as any).serviceId || (invoice as any).jobCardId || (invoice as any).template === 'REVAMP') ? (
+          <div className="overflow-x-auto pb-2 -mx-1 sm:mx-0 print:overflow-visible print:m-0 print:p-0">
+            <RevampInvoiceView invoice={invoice as any} />
+          </div>
+        ) : (
+          <div className="overflow-x-auto pb-2 -mx-1 sm:mx-0 print:overflow-visible print:m-0 print:p-0">
           <div
             id="printable-tax-invoice"
             className="bg-white p-4 md:p-8 rounded-2xl border border-slate-200 shadow-sm text-black font-sans space-y-2 printable-tax-invoice print:border-none print:shadow-none print:p-0 print:m-0 print:space-y-0 min-w-[650px] sm:min-w-0"
@@ -268,17 +286,29 @@ export const PublicInvoicePage: React.FC = () => {
 
               <div className="text-center flex-1 px-2">
                 <h1 className="text-xl font-extrabold tracking-wide uppercase text-black font-sans">
-                  SR ENTERPRISES
+                  {(invoice as any)?.businessDetails?.companyName || 'Enterprises CRM'}
                 </h1>
-                <p className="text-[10px] text-slate-800 font-medium mt-0.5">
-                  Shop A6 SaiPritam Nagari, Chatrapati Chowk Rahatani. Mo.7385059197
-                </p>
-                <p className="text-[10px] text-slate-800 font-medium mt-0.5">
-                  Pimpri-Chinchwad, Pune., Maharashtra, 411017
-                </p>
-                <p className="text-[11px] font-bold text-black mt-1">
-                  Mobile: 7385059197 &nbsp;&nbsp;&nbsp;&nbsp; Email: srenterprises02015@gmail.com
-                </p>
+                {(() => {
+                  const biz = (invoice as any)?.businessDetails;
+                  const addr = [biz?.addressLine1, biz?.addressLine2, biz?.city, biz?.state, biz?.pincode]
+                    .filter(Boolean)
+                    .join(', ');
+                  return (
+                    <>
+                      {addr && <p className="text-[10px] text-slate-800 font-medium mt-0.5">{addr}</p>}
+                      {(biz?.phone || biz?.email) && (
+                        <p className="text-[11px] font-bold text-black mt-1">
+                          {biz?.phone && `Mobile: ${biz.phone}`}
+                          {biz?.phone && biz?.email && ' \u00A0\u00A0\u00A0\u00A0 '}
+                          {biz?.email && `Email: ${biz.email}`}
+                        </p>
+                      )}
+                      {biz?.gstin && (
+                        <p className="text-[10px] text-slate-800 font-medium mt-0.5">GSTIN: {biz.gstin}</p>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
 
@@ -333,7 +363,7 @@ export const PublicInvoicePage: React.FC = () => {
                       : [
                           {
                             id: 'default-item',
-                            nameSnapshot: 'RO Water Purifier System / Maintenance',
+                            nameSnapshot: 'Standard Equipment Service / Maintenance',
                             quantity: 1,
                             unitPriceSnapshot: String(totalAmountNum),
                             lineTotal: String(totalAmountNum),
@@ -419,18 +449,31 @@ export const PublicInvoicePage: React.FC = () => {
                   <div>Bank Details: Bank: State Bank of India, Name: Enterprises CRM, A/c No: 30998877665, IFSC: SBIN0001234, Branch: Main Branch, Pune</div>
                   <div>Payment QR Code: Scan &amp; Pay (UPI), UPI ID: enterprises.crm@upi</div>
                   <div>Terms and Conditions: 1) Goods once sold will not be taken back or exchanged, 2) Warranty as per manufacturer terms &amp; conditions, 3) Service charges applicable for out-of-warranty services, 4) Subject to local jurisdiction, 5) Payment due immediately or as per agreed terms</div>
-                  <div>Authorised Signatory For ENTERPRISES CRM</div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-        </div>
+      </div>
+    )}
 
         {/* Footer Support Info (Hidden on Print) */}
         <div className="text-center py-4 text-xs text-slate-500 print:hidden space-y-1">
           <p>© {new Date().getFullYear()} Enterprises CRM. All rights reserved.</p>
-          <p>For any queries, please call us at 7385059197 or email support@example.com</p>
+          {(() => {
+            const biz = (invoice as any)?.businessDetails;
+            if (biz?.phone || biz?.email) {
+              return (
+                <p>
+                  For any queries, please{' '}
+                  {biz?.phone && <>call us at {biz.phone}</>}
+                  {biz?.phone && biz?.email && <> or </>}
+                  {biz?.email && <>email {biz.email}</>}
+                </p>
+              );
+            }
+            return null;
+          })()}
         </div>
       </div>
     </div>

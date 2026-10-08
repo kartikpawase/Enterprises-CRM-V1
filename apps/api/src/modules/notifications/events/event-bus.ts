@@ -137,7 +137,7 @@ export class DomainEventBus {
       await notificationsService.dispatchWarrantyExpiring({
         warrantyId: event.entityId,
         customerName: customerName || 'Customer',
-        machineModel: machineModel || 'RO Purifier',
+        machineModel: machineModel || 'Equipment',
         expiryDate: expiryDate || new Date().toISOString().split('T')[0],
       });
     });

@@ -85,26 +85,14 @@ export class InventoryRepository {
         },
       };
     } catch {
-      const data = [
-        {
-          productId: 'p1111111-1111-1111-1111-111111111111',
-          productName: 'Aquapure RO 100 GPD Commercial',
-          sku: 'RO-100-GPD',
-          brand: 'Aquapure',
-          productType: 'RO_MACHINE',
-          unitPrice: '25000.00',
-          currentStock: memoryStockBalances.get('p1111111-1111-1111-1111-111111111111')?.currentStock ?? 25,
-          minimumAlertStock: 5,
-          updatedAt: new Date(),
-        },
-      ];
+      const data: any[] = [];
       return {
         data,
         pagination: {
           page: 1,
           limit,
-          total: data.length,
-          totalPages: 1,
+          total: 0,
+          totalPages: 0,
         },
       };
     }

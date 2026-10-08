@@ -29,10 +29,10 @@ export const CreateWarrantyModal: React.FC<CreateWarrantyModalProps> = ({
   const [warrantyType, setWarrantyType] = useState<z.infer<typeof WarrantyTypeSchema>>('STANDARD_MACHINE');
   const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0] || '');
   const [durationMonths, setDurationMonths] = useState(12);
-  const [terms, setTerms] = useState('Covers all electrical components, booster pump, RO membrane, and labour costs.');
+  const [terms, setTerms] = useState('Covers all standard operational components and technician service costs.');
   const [coverageParts, setCoverageParts] = useState(true);
   const [coverageLabour, setCoverageLabour] = useState(true);
-  const [coverageMembrane, setCoverageMembrane] = useState(true);
+  const [coverageMembrane, setCoverageMembrane] = useState(false);
 
   // Fetch customers list for selection (sorted with newest on top)
   const { data: customerData } = useCustomersQuery({
@@ -86,7 +86,7 @@ export const CreateWarrantyModal: React.FC<CreateWarrantyModalProps> = ({
       return;
     }
     if (!assetId) {
-      toast.error('Please select a customer-owned RO unit');
+      toast.error('Please select a customer asset/equipment');
       return;
     }
 
@@ -159,7 +159,7 @@ export const CreateWarrantyModal: React.FC<CreateWarrantyModalProps> = ({
               <option value="">-- Choose Unit --</option>
               {assets.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.product?.name || 'RO Purifier'} (SN: {a.serialNumber || 'Non-serialized'})
+                  {a.product?.name || 'Equipment'} (SN: {a.serialNumber || 'Non-serialized'})
                 </option>
               ))}
             </select>
@@ -267,7 +267,7 @@ export const CreateWarrantyModal: React.FC<CreateWarrantyModalProps> = ({
                 onChange={(e) => setCoverageMembrane(e.target.checked)}
                 className="rounded text-primary-600 focus:ring-primary-500"
               />
-              <span className="text-slate-700">RO Membrane &amp; Filters</span>
+              <span className="text-slate-700">Consumables &amp; Replacements</span>
             </label>
           </div>
         </div>

@@ -249,7 +249,7 @@ export class BackupService {
     };
 
     await writeLine('-- ============================================================');
-    await writeLine('-- SR ENTERPRISES CRM — COMPLETE POSTGRESQL DATABASE BACKUP');
+    await writeLine('-- ENTERPRISES CRM — COMPLETE POSTGRESQL DATABASE BACKUP');
     await writeLine(`-- Dump Timestamp: ${new Date().toISOString()}`);
     await writeLine('-- ============================================================');
     await writeLine('SET statement_timeout = 0;');

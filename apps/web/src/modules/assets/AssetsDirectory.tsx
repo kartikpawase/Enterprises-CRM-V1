@@ -138,8 +138,8 @@ export const AssetsDirectory: React.FC = () => {
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Page Header */}
       <PageHeader
-        title="Customer Assets & Machines"
-        description="Track registered water purifier units, serial numbers, warranty coverage, and customer assignments."
+        title="Customer Assets & Equipment"
+        description="Track registered equipment and assets, serial numbers, warranty coverage, and customer assignments."
         breadcrumbs={[{ label: 'Home', href: '/dashboard' }, { label: 'Assets' }]}
       />
 
@@ -212,7 +212,7 @@ export const AssetsDirectory: React.FC = () => {
           emptyDescription={
             filters.search || filters.assetType || filters.status
               ? 'No assets match the current search or filters.'
-              : 'Customer assets are automatically generated when sales with RO purifiers are confirmed.'
+              : 'Customer assets are automatically generated when equipment sales are confirmed.'
           }
         />
       </div>

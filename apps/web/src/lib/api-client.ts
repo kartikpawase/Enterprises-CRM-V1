@@ -43,17 +43,43 @@ export function resolveApiUrl(endpoint: string): string {
     return endpoint;
   }
 
-  const baseUrl = getApiBaseUrl();
   const cleanEndpoint = endpoint.startsWith(API_PREFIX)
     ? endpoint
     : `${API_PREFIX}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+
+  const baseUrl = getApiBaseUrl();
+
+  // Handle browser environment resilience:
+  if (typeof window !== 'undefined' && window.location) {
+    const isBrowserOnRemoteHost =
+      Boolean(window.location.hostname) &&
+      window.location.hostname !== 'localhost' &&
+      window.location.hostname !== '127.0.0.1';
+
+    const isBaseUrlLocalhost =
+      baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1');
+
+    // If client is running in a remote production/preview browser, ignore baked-in localhost baseUrl
+    // and reuse same-origin relative API path to prevent browser "Failed to fetch" / mixed content errors.
+    if (isBrowserOnRemoteHost && isBaseUrlLocalhost) {
+      return cleanEndpoint;
+    }
+
+    // Upgrade http to https if browsing over secure connection to prevent mixed-content blockage
+    if (window.location.protocol === 'https:' && baseUrl.startsWith('http://')) {
+      if (isBaseUrlLocalhost) {
+        return cleanEndpoint;
+      }
+      return `${baseUrl.replace(/^http:\/\//i, 'https://')}${cleanEndpoint.startsWith('/') ? '' : '/'}${cleanEndpoint}`;
+    }
+  }
 
   if (baseUrl) {
     return `${baseUrl}${cleanEndpoint.startsWith('/') ? '' : '/'}${cleanEndpoint}`;
   }
 
   if (typeof window !== 'undefined' && (!window.location?.origin || window.location.origin === 'null')) {
-    return `http://localhost:3000${cleanEndpoint.startsWith('/') ? '' : '/'}${cleanEndpoint}`;
+    return `http://localhost:4000${cleanEndpoint.startsWith('/') ? '' : '/'}${cleanEndpoint}`;
   }
 
   return cleanEndpoint;
@@ -141,6 +167,33 @@ export async function apiRequest<T>(
       credentials: 'include', // Send secure HTTP-only cookies
       ...customConfig,
       signal: controller.signal,
+    });
+  } catch (networkErr: any) {
+    clearTimeout(timeoutId);
+    if (controller.signal.aborted || networkErr?.name === 'AbortError' || networkErr?.name === 'TimeoutError') {
+      throw new ApiClientError({
+        code: 'TIMEOUT',
+        message: 'Request timed out after 30 seconds. The server may be busy or unreachable.',
+        requestId: defaultHeaders[HTTP_HEADERS.REQUEST_ID],
+      });
+    }
+
+    const isFailedToFetch =
+      networkErr?.name === 'TypeError' &&
+      (networkErr?.message?.includes('fetch') || networkErr?.message === 'Failed to fetch');
+
+    const diagnosticMessage = isFailedToFetch
+      ? `Unable to reach CRM API server (${url}). Please verify network connection, backend availability, or CORS.`
+      : (networkErr?.message || 'Network request failed');
+
+    throw new ApiClientError({
+      code: 'NETWORK_ERROR',
+      message: diagnosticMessage,
+      requestId: defaultHeaders[HTTP_HEADERS.REQUEST_ID],
+      details: {
+        originalError: networkErr?.message,
+        url,
+      },
     });
   } finally {
     clearTimeout(timeoutId);

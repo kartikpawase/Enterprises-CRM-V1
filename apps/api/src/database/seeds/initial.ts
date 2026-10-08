@@ -137,7 +137,7 @@ export async function seedInitialSystemData(): Promise<void> {
       try {
         await db
           .update(users)
-          .set({ displayName: 'Ramesh Bomble' })
+          .set({ displayName: 'Administrator' })
           .where(eq(users.username, 'admin'));
       } catch {}
       return;
@@ -231,8 +231,8 @@ export async function seedInitialSystemData(): Promise<void> {
         id: '00000000-0000-0000-0000-000000000001',
         username: 'admin',
         passwordHash: adminPasswordHash,
-        displayName: 'Ramesh Bomble',
-        email: 'admin@srenterprises.com',
+        displayName: 'Administrator',
+        email: 'admin@enterprisescrm.local',
         role: 'Super Admin',
         status: 'ACTIVE',
       })
@@ -240,8 +240,8 @@ export async function seedInitialSystemData(): Promise<void> {
         target: users.username,
         set: {
           passwordHash: adminPasswordHash,
-          displayName: 'Ramesh Bomble',
-          email: 'admin@srenterprises.com',
+          displayName: 'Administrator',
+          email: 'admin@enterprisescrm.local',
           role: 'Super Admin',
           status: 'ACTIVE',
           updatedAt: new Date(),
@@ -251,7 +251,7 @@ export async function seedInitialSystemData(): Promise<void> {
     // Ensure existing admin user record in database has updated name
     await db
       .update(users)
-      .set({ displayName: 'Ramesh Bomble' })
+      .set({ displayName: 'Administrator', email: 'admin@enterprisescrm.local' })
       .where(eq(users.username, 'admin'));
   } catch (err) {
     console.warn('[Database] Seed initial data notice:', err);

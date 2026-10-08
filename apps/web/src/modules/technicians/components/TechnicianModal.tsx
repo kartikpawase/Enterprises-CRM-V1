@@ -12,17 +12,6 @@ export interface TechnicianModalProps {
   technician?: TechnicianItem | null;
 }
 
-const POPULAR_SKILLS = [
-  'RO Installation',
-  'Commercial RO Setup',
-  'Membrane Replacement',
-  'TDS Calibration',
-  'Booster Pump Repair',
-  'Filter Replacement',
-  'Leakage Troubleshooting',
-  'Electrical Wiring',
-];
-
 export const TechnicianModal: React.FC<TechnicianModalProps> = ({
   isOpen,
   onClose,
@@ -35,8 +24,6 @@ export const TechnicianModal: React.FC<TechnicianModalProps> = ({
   const [emergencyContact, setEmergencyContact] = useState('');
   const [status, setStatus] = useState<'ACTIVE' | 'ON_LEAVE' | 'INACTIVE'>('ACTIVE');
   const [portalEnabled, setPortalEnabled] = useState(false);
-  const [skills, setSkills] = useState<string[]>(['RO Installation', 'Filter Replacement']);
-  const [customSkill, setCustomSkill] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const createMutation = useCreateTechnicianMutation();
@@ -51,7 +38,6 @@ export const TechnicianModal: React.FC<TechnicianModalProps> = ({
       setEmergencyContact(technician.emergencyContact || '');
       setStatus(technician.status);
       setPortalEnabled(Boolean(technician.portalEnabled));
-      setSkills(technician.skills && technician.skills.length > 0 ? technician.skills : ['RO Installation']);
     } else {
       setFullName('');
       setPhone('');
@@ -60,27 +46,11 @@ export const TechnicianModal: React.FC<TechnicianModalProps> = ({
       setEmergencyContact('');
       setStatus('ACTIVE');
       setPortalEnabled(false);
-      setSkills(['RO Installation', 'Filter Replacement']);
     }
     setError(null);
   }, [technician, isOpen]);
 
   if (!isOpen) return null;
-
-  const handleToggleSkill = (skill: string) => {
-    if (skills.includes(skill)) {
-      setSkills(skills.filter((s) => s !== skill));
-    } else {
-      setSkills([...skills, skill]);
-    }
-  };
-
-  const handleAddCustomSkill = () => {
-    if (customSkill.trim() && !skills.includes(customSkill.trim())) {
-      setSkills([...skills, customSkill.trim()]);
-      setCustomSkill('');
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,7 +75,7 @@ export const TechnicianModal: React.FC<TechnicianModalProps> = ({
             address: address.trim() || null,
             emergencyContact: emergencyContact.trim() || null,
             status,
-            skills,
+            skills: technician.skills || [],
             portalEnabled,
           },
         });
@@ -117,7 +87,7 @@ export const TechnicianModal: React.FC<TechnicianModalProps> = ({
           address: address.trim() || null,
           emergencyContact: emergencyContact.trim() || null,
           status,
-          skills,
+          skills: [],
           portalEnabled,
         });
       }
@@ -200,7 +170,7 @@ export const TechnicianModal: React.FC<TechnicianModalProps> = ({
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="e.g. ramesh@srenterprises.com"
+                placeholder="e.g. ramesh@enterprisescrm.local"
                 className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
               />
             </div>
@@ -274,50 +244,6 @@ export const TechnicianModal: React.FC<TechnicianModalProps> = ({
             </div>
           </div>
 
-          {/* Skills & Expertise */}
-          <div className="space-y-2">
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
-              Skills & Specializations
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {POPULAR_SKILLS.map((sk) => {
-                const isSelected = skills.includes(sk);
-                return (
-                  <button
-                    key={sk}
-                    type="button"
-                    onClick={() => handleToggleSkill(sk)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                      isSelected
-                        ? 'bg-indigo-600 text-white shadow-2xs'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    {isSelected ? '✓ ' : '+ '}
-                    {sk}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Custom skill input */}
-            <div className="flex items-center gap-2 pt-2">
-              <input
-                type="text"
-                value={customSkill}
-                onChange={(e) => setCustomSkill(e.target.value)}
-                placeholder="Add other specialization..."
-                className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
-              />
-              <button
-                type="button"
-                onClick={handleAddCustomSkill}
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-              >
-                Add
-              </button>
-            </div>
-          </div>
 
           {/* Actions */}
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">

@@ -1,21 +1,24 @@
 import React from 'react';
 import { UsersRound, ShoppingCart, FileText, Wrench } from 'lucide-react';
-import roPurifierBg from '../../assets/ro-purifier-bg.jpg';
 import { CRM_OFFICIAL_LOGO_B64 } from '../../assets/invoiceAssets';
 
 export const LoginBrandPanel: React.FC = () => {
   return (
-    <div className="relative w-full lg:w-[54%] bg-[#0B132B] text-white flex flex-col justify-between p-4 sm:p-7 lg:p-8 overflow-hidden select-none">
-      {/* High-Fidelity Background Visual Scene */}
-      <div className="absolute inset-0 z-0">
-        <img
-          src={roPurifierBg}
-          alt="Enterprises CRM Management System"
-          className="w-full h-full object-cover object-center"
+    <div className="relative w-full lg:w-[54%] bg-slate-950 text-white flex flex-col justify-between p-4 sm:p-7 lg:p-8 overflow-hidden select-none">
+      {/* High-Fidelity Modern Enterprise Mesh Visual Scene */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-primary-600/20 blur-3xl" />
+        <div className="absolute top-1/3 -right-32 w-96 h-96 rounded-full bg-indigo-600/15 blur-3xl" />
+        <div className="absolute -bottom-32 left-1/4 w-96 h-96 rounded-full bg-sky-500/15 blur-3xl" />
+        {/* Subtle Geometric Enterprise Grid */}
+        <div 
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: `radial-gradient(circle at 1px 1px, #ffffff 1px, transparent 0)`,
+            backgroundSize: '24px 24px'
+          }}
         />
-        {/* Hydro-Dark Gradient Overlays for High-Contrast Clarity */}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#0B132B]/95 via-[#0F294A]/80 to-[#0284C7]/40 pointer-events-none" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#070C1B]/95 via-transparent to-black/40 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/80 to-slate-900/60" />
       </div>
 
       {/* Top Left Branding Header */}

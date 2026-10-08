@@ -15,6 +15,7 @@ import { formatINR, formatDate } from '../../lib/formatters';
 import { cn } from '../../lib/utils';
 import { sendInvoiceViaWhatsApp } from '../../lib/whatsapp';
 import { OFFICIAL_LOWER_SECTION_B64, CRM_OFFICIAL_LOGO_B64 } from '../../assets/invoiceAssets';
+import { RevampInvoiceView } from '../../components/invoices/RevampInvoiceView';
 import {
   Printer,
   ArrowLeft,
@@ -289,11 +290,17 @@ export const InvoiceDetailPage: React.FC = () => {
           )}
         </div>
       )}
-      {/* Printable SR ENTERPRISES Invoice / Bill of Supply */}
-      {(() => {
-        const customerName = (invoice.customerName || 'Valued Customer').toUpperCase();
-        const customerPhone = invoice.customerPhone || '9766039197';
-        const invoiceNo = invoice.invoiceNumber || '82026209';
+      {/* Revamp Invoice for Service/JobCard Invoices OR Standard Invoices */}
+      {Boolean(invoice.serviceId || invoice.jobCardId || (invoice as any).template === 'REVAMP') ? (
+        <div className="overflow-x-auto pb-2 -mx-1 sm:mx-0 print:overflow-visible print:m-0 print:p-0">
+          <RevampInvoiceView invoice={invoice as any} />
+        </div>
+      ) : (
+        /* Printable Tax Invoice / Bill of Supply */
+        (() => {
+          const customerName = (invoice.customerName || 'Valued Customer').toUpperCase();
+        const customerPhone = invoice.customerPhone || 'N/A';
+        const invoiceNo = invoice.invoiceNumber || 'N/A';
         const invoiceDate = new Date(invoice.invoiceDate).toLocaleDateString('en-IN', {
           day: '2-digit',
           month: '2-digit',
@@ -351,17 +358,29 @@ export const InvoiceDetailPage: React.FC = () => {
 
                 <div className="text-center flex-1 px-2">
                   <h1 className="text-xl font-extrabold tracking-wide uppercase text-black font-sans">
-                    SR ENTERPRISES
+                    {(invoice as any)?.businessDetails?.companyName || 'Enterprises CRM'}
                   </h1>
-                  <p className="text-[10px] text-slate-800 font-medium mt-0.5">
-                    Shop A6 SaiPritam Nagari, Chatrapati Chowk Rahatani. Mo.7385059197
-                  </p>
-                  <p className="text-[10px] text-slate-800 font-medium mt-0.5">
-                    Pimpri-Chinchwad, Pune., Maharashtra, 411017
-                  </p>
-                  <p className="text-[11px] font-bold text-black mt-1">
-                    Mobile: 7385059197 &nbsp;&nbsp;&nbsp;&nbsp; Email: srenterprises02015@gmail.com
-                  </p>
+                  {(() => {
+                    const biz = (invoice as any)?.businessDetails;
+                    const addr = [biz?.addressLine1, biz?.addressLine2, biz?.city, biz?.state, biz?.pincode]
+                      .filter(Boolean)
+                      .join(', ');
+                    return (
+                      <>
+                        {addr && <p className="text-[10px] text-slate-800 font-medium mt-0.5">{addr}</p>}
+                        {(biz?.phone || biz?.email) && (
+                          <p className="text-[11px] font-bold text-black mt-1">
+                            {biz?.phone && `Mobile: ${biz.phone}`}
+                            {biz?.phone && biz?.email && ' \u00A0\u00A0\u00A0\u00A0 '}
+                            {biz?.email && `Email: ${biz.email}`}
+                          </p>
+                        )}
+                        {biz?.gstin && (
+                          <p className="text-[10px] text-slate-800 font-medium mt-0.5">GSTIN: {biz.gstin}</p>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -511,7 +530,7 @@ export const InvoiceDetailPage: React.FC = () => {
           </div>
           </div>
         );
-      })()}
+      })())}
 
       {/* Payment History & Realized Collections Ledger (Screen Only) */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4 print:hidden">

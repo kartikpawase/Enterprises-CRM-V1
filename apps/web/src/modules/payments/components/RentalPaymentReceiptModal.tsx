@@ -1,5 +1,6 @@
 import React from 'react';
 import { Button } from '../../../components/ui/Button';
+import { usePublicSettingsQuery } from '../../settings/settings.api';
 import { formatDate } from '../../../lib/formatters';
 import type { RentalPaymentListItem } from '../../rentals/rentals.api';
 import { OFFICIAL_LOWER_SECTION_B64, CRM_OFFICIAL_LOGO_B64 } from '../../../assets/invoiceAssets';
@@ -18,9 +19,16 @@ export const RentalPaymentReceiptModal: React.FC<RentalPaymentReceiptModalProps>
 }) => {
   if (!isOpen || !payment) return null;
 
+  const { data: publicSettings } = usePublicSettingsQuery();
+
   const handlePrint = () => {
     window.print();
   };
+
+  const companyName = publicSettings?.businessName || 'ENTERPRISES CRM';
+  const companyCity = publicSettings?.city || '';
+  const companyPhone = publicSettings?.phone || '';
+  const companyEmail = publicSettings?.email || '';
 
   // Customer & Document Data
   const customerName = (payment.customerName || 'Valued Customer').toUpperCase();
@@ -113,14 +121,19 @@ export const RentalPaymentReceiptModal: React.FC<RentalPaymentReceiptModalProps>
 
               <div className="text-center flex-1 px-2">
                 <h1 className="text-xl font-extrabold tracking-wide uppercase text-black font-sans">
-                  ENTERPRISES CRM
+                  {companyName}
                 </h1>
-                <p className="text-[10px] text-slate-800 font-medium mt-0.5">
-                  Shop A6 SaiPritam Nagari, Chatrapati Chowk Rahatani. Mo.7385059197, Pimpri-Chinchwad, Pune., Maharashtra, 411017
-                </p>
-                <p className="text-[11px] font-bold text-black mt-1">
-                  Mobile: 7385059197 &nbsp;&nbsp;&nbsp;&nbsp; Email: srenterprises02015@gmail.com
-                </p>
+                {companyCity ? (
+                  <p className="text-[10px] text-slate-800 font-medium mt-0.5">
+                    {companyCity}
+                  </p>
+                ) : null}
+                {(companyPhone || companyEmail) ? (
+                  <p className="text-[11px] font-bold text-black mt-1">
+                    {companyPhone ? <>Mobile: {companyPhone}&nbsp;&nbsp;&nbsp;&nbsp;</> : null}
+                    {companyEmail ? <>Email: {companyEmail}</> : null}
+                  </p>
+                ) : null}
               </div>
 
               <div className="w-16 shrink-0" />

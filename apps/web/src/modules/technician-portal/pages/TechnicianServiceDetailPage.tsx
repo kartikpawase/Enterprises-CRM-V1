@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { queryClient } from '../../../lib/query-client';
 import {
   ArrowLeft,
   Phone,
@@ -42,11 +43,31 @@ import { TECHNICIAN_COMPLETED_ROUTE } from '@crm/shared';
 import { useTechnicianTracking } from '../hooks/useTechnicianTracking';
 import { apiClient } from '../../../lib/api-client';
 import type { TechnicianServiceDetail, TechnicianBillingSummary, TechnicianPaymentReceipt } from '@crm/types';
+import { RevampInvoiceView } from '../../../components/invoices/RevampInvoiceView';
+import { sendInvoiceViaWhatsApp } from '../../../lib/whatsapp';
 
 interface MaterialItem {
   id?: string;
   name: string;
   sku?: string;
+  brand?: string;
+  model?: string;
+  productType?: string;
+  unitPrice?: number;
+  currentStock?: number;
+}
+
+interface PartReplacedEntry {
+  itemId?: string;
+  inventoryItemId?: string;
+  productId?: string;
+  itemName: string;
+  description?: string;
+  sku?: string;
+  quantity: number;
+  unitPrice?: number;
+  lineTotal?: number;
+  isWarrantyCovered?: boolean;
 }
 
 export const TechnicianServiceDetailPage: React.FC = () => {
@@ -74,23 +95,31 @@ export const TechnicianServiceDetailPage: React.FC = () => {
   const [workPerformed, setWorkPerformed] = useState<string>('');
   const [technicianNotes, setTechnicianNotes] = useState<string>('');
   const [customerRemarks, setCustomerRemarks] = useState<string>('');
-  const [partsReplaced, setPartsReplaced] = useState<
-    Array<{ itemId?: string; itemName: string; quantity: number; isWarrantyCovered?: boolean }>
-  >([]);
+  const [partsReplaced, setPartsReplaced] = useState<PartReplacedEntry[]>([]);
   const [businessFields, setBusinessFields] = useState<Record<string, string>>({
-    rawWaterTds: '',
-    purifiedWaterTds: '',
     pressureBar: '',
     temperatureC: '',
   });
   const [customerConfirmed, setCustomerConfirmed] = useState<boolean>(false);
   const [customerSignerName, setCustomerSignerName] = useState<string>('');
 
-  // Materials Catalog Picker state
+  // Materials Catalog Picker & Billing state
   const [catalogMaterials, setCatalogMaterials] = useState<MaterialItem[]>([]);
+  const [selectedMaterialId, setSelectedMaterialId] = useState<string>('');
   const [selectedPartName, setSelectedPartName] = useState<string>('');
   const [selectedPartQty, setSelectedPartQty] = useState<number>(1);
   const [selectedPartWarranty, setSelectedPartWarranty] = useState<boolean>(false);
+  const [serviceCharge, setServiceCharge] = useState<string>('');
+  const [gstEnabled, setGstEnabled] = useState<boolean>(false);
+  const [gstRate, setGstRate] = useState<number>(18);
+  const [isCustomGstRate, setIsCustomGstRate] = useState<boolean>(false);
+  const [customGstRateInput, setCustomGstRateInput] = useState<string>('18');
+  const [completionPaymentMethod, setCompletionPaymentMethod] = useState<'CASH' | 'ONLINE'>('CASH');
+  const [completionPaymentAmount, setCompletionPaymentAmount] = useState<string>('');
+  const [completionPaymentReference, setCompletionPaymentReference] = useState<string>('');
+  const [isCompletionConfirmOpen, setIsCompletionConfirmOpen] = useState<boolean>(false);
+  const [completedInvoice, setCompletedInvoice] = useState<any | null>(null);
+  const [isCompletedInvoiceModalOpen, setIsCompletedInvoiceModalOpen] = useState<boolean>(false);
 
   // Phase 7: Payment Collection State
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -246,8 +275,32 @@ export const TechnicianServiceDetailPage: React.FC = () => {
     }
   };
 
+  // Bill Calculations
+  const partsSubtotal = partsReplaced.reduce((sum, p) => {
+    if (p.isWarrantyCovered) return sum;
+    const price = Math.max(0, Number(p.unitPrice || 0));
+    return sum + price * Math.max(1, Number(p.quantity) || 1);
+  }, 0);
+  const parsedLabor = Math.max(0, parseFloat(serviceCharge) || 0);
+  const billSubtotal = partsSubtotal + parsedLabor;
+  const effectiveGstRate = gstEnabled
+    ? (isCustomGstRate ? Math.max(0, parseFloat(customGstRateInput) || 0) : gstRate)
+    : 0;
+  const billTax = gstEnabled ? (billSubtotal * effectiveGstRate) / 100 : 0;
+  const billTotal = billSubtotal + billTax;
+
+  const paidNum = completionPaymentAmount !== '' ? Math.max(0, parseFloat(completionPaymentAmount) || 0) : billTotal;
+  const remainingNum = Math.max(0, billTotal - paidNum);
+  let livePaymentStatus = 'NOT PAID';
+  if (paidNum >= billTotal && billTotal > 0) {
+    livePaymentStatus = 'PAID';
+  } else if (paidNum > 0) {
+    livePaymentStatus = 'PARTIALLY PAID';
+  }
+
   // 5. Complete Job
   const handleCompleteJob = async () => {
+    if (actionLoading === 'complete') return; // Prevent duplicate submissions
     const targetId = getJobCardTargetId();
     if (!targetId) return;
 
@@ -261,19 +314,61 @@ export const TechnicianServiceDetailPage: React.FC = () => {
     setActionSuccess(null);
 
     try {
-      await apiClient.post(`/technician/job-cards/${targetId}/complete`, {
+      const response = await apiClient.post<any>(`/technician/job-cards/${targetId}/complete`, {
         workPerformed: workPerformed.trim(),
         diagnosis: diagnosis.trim() || undefined,
         technicianNotes: technicianNotes.trim() || undefined,
         customerRemarks: customerRemarks.trim() || undefined,
-        partsReplaced,
+        partsReplaced: partsReplaced
+          .filter((p) => p.itemName && p.itemName.trim())
+          .map((p) => ({
+            inventoryItemId: p.inventoryItemId || p.itemId,
+            productId: p.productId || p.inventoryItemId || p.itemId,
+            itemName: p.itemName.trim(),
+            description: p.description?.trim() || undefined,
+            quantity: Math.max(1, Number(p.quantity) || 1),
+            unitPrice: Math.max(0, Number(p.unitPrice) || 0),
+            isWarrantyCovered: Boolean(p.isWarrantyCovered),
+          })),
+        serviceCharge: parsedLabor,
+        gstEnabled,
+        gstRate: gstEnabled ? effectiveGstRate : undefined,
+        payment: {
+          method: completionPaymentMethod,
+          amount: paidNum,
+          reference: completionPaymentMethod === 'ONLINE' ? (completionPaymentReference.trim() || undefined) : undefined,
+        },
         businessFields,
         customerSignatureFileId: customerConfirmed
           ? customerSignerName.trim() || 'Customer Confirmed'
           : undefined,
       });
+
       setIsExecutionModalOpen(false);
-      setActionSuccess('Job completed successfully!');
+      setIsCompletionConfirmOpen(false);
+
+      const invoiceData = response?.data?.invoice || response?.data?.data?.invoice;
+      if (invoiceData) {
+        setCompletedInvoice(invoiceData);
+        setIsCompletedInvoiceModalOpen(true);
+      }
+
+      setActionSuccess('Job completed and invoice generated successfully!');
+
+      if (tracking.activeServiceId === id || tracking.isNavigating) {
+        try {
+          await tracking.stopTracking();
+        } catch (stopErr) {
+          console.warn('[Tracking] Clean stop tracking notice on job completion:', stopErr);
+        }
+      }
+      
+      // Invalidate Admin and CRM caches so generated invoice immediately appears
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['services'] });
+      queryClient.invalidateQueries({ queryKey: ['job-cards'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+
       await fetchServiceDetail();
     } catch (err: any) {
       setActionError(err?.message || 'Unable to complete job card.');
@@ -282,24 +377,27 @@ export const TechnicianServiceDetailPage: React.FC = () => {
     }
   };
 
-  // Helper: Add part to parts list
-  const handleAddPart = () => {
-    const trimmed = selectedPartName.trim();
-    if (!trimmed) return;
-    if (selectedPartQty <= 0) return;
-
+  // Helper: Add manual part row
+  const handleAddManualPart = () => {
     setPartsReplaced((prev) => [
       ...prev,
       {
-        itemName: trimmed,
-        quantity: Number(selectedPartQty),
-        isWarrantyCovered: selectedPartWarranty,
+        itemName: '',
+        description: '',
+        quantity: 1,
+        unitPrice: 0,
+        isWarrantyCovered: false,
       },
     ]);
+  };
 
-    setSelectedPartName('');
-    setSelectedPartQty(1);
-    setSelectedPartWarranty(false);
+  // Helper: Update a spare part row
+  const handleUpdatePart = (index: number, field: keyof PartReplacedEntry, value: any) => {
+    setPartsReplaced((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
   };
 
   // Helper: Remove part from parts list
@@ -1267,179 +1365,369 @@ export const TechnicianServiceDetailPage: React.FC = () => {
                 <textarea
                   value={workPerformed}
                   onChange={(e) => setWorkPerformed(e.target.value)}
-                  placeholder="Describe step-by-step actions performed (e.g., replaced filter, flushed system, tested pressure)..."
+                  placeholder="Describe step-by-step actions performed (e.g., inspected equipment, replaced worn part, tested operation)..."
                   rows={3}
                   className="w-full bg-white border border-slate-300 rounded-btn p-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
                 />
               </div>
 
-              {/* Section 3: Parts / Materials Consumed */}
-              <div className="space-y-2.5 p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl">
+              {/* Section 3: Spare Parts Used (Manual Entry) */}
+              <div className="space-y-3 p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                  <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
                     <Package className="w-3.5 h-3.5 text-primary-600" />
-                    <span>Parts & Materials Consumed</span>
+                    <span>Spare Parts Used</span>
                   </label>
-                  <span className="text-[11px] text-slate-500 font-medium">
-                    {partsReplaced.length} Item(s)
-                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddManualPart}
+                    className="px-2.5 py-1 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-semibold text-xs flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Spare Part</span>
+                  </button>
                 </div>
 
-                {/* Add Part Form */}
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 pt-1">
-                  <div className="sm:col-span-6">
-                    <input
-                      type="text"
-                      list="catalog-parts-list"
-                      value={selectedPartName}
-                      onChange={(e) => setSelectedPartName(e.target.value)}
-                      placeholder="Select or enter part name..."
-                      className="w-full bg-white border border-slate-300 rounded-btn p-2.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-primary-500"
-                    />
-                    <datalist id="catalog-parts-list">
-                      {catalogMaterials.map((mat, i) => (
-                        <option key={mat.id || i} value={mat.name}>
-                          {mat.sku ? `[${mat.sku}] ` : ''}
-                          {mat.name}
-                        </option>
-                      ))}
-                    </datalist>
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <input
-                      type="number"
-                      min={1}
-                      value={selectedPartQty}
-                      onChange={(e) => setSelectedPartQty(Math.max(1, Number(e.target.value)))}
-                      className="w-full bg-white border border-slate-300 rounded-btn p-2.5 text-xs text-slate-900 text-center focus:outline-none focus:border-primary-500"
-                      title="Quantity"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2 flex items-center justify-center">
-                    <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-700 font-medium cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedPartWarranty}
-                        onChange={(e) => setSelectedPartWarranty(e.target.checked)}
-                        className="rounded border-slate-300 text-primary-600 focus:ring-0"
-                      />
-                      <span>Warranty</span>
-                    </label>
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <button
-                      type="button"
-                      onClick={handleAddPart}
-                      disabled={!selectedPartName.trim()}
-                      className="w-full h-full py-2.5 rounded-btn bg-primary-600 hover:bg-primary-700 text-white font-semibold text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Parts List */}
-                {partsReplaced.length > 0 && (
-                  <div className="space-y-1.5 pt-2">
-                    {partsReplaced.map((part, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200/90 text-xs shadow-2xs"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-800">{part.itemName}</span>
-                          <span className="font-mono text-primary-700 bg-primary-50 px-1.5 py-0.5 rounded text-[10px] border border-primary-200">
-                            Qty: {part.quantity}
-                          </span>
-                          {part.isWarrantyCovered && (
-                            <span className="text-[10px] text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                              Warranty
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemovePart(index)}
-                          className="text-slate-400 hover:text-rose-600 p-1 cursor-pointer"
+                {partsReplaced.length > 0 ? (
+                  <div className="space-y-2.5 pt-1">
+                    {partsReplaced.map((part, index) => {
+                      const lineTotal = part.isWarrantyCovered
+                        ? 0
+                        : (Number(part.unitPrice) || 0) * (Number(part.quantity) || 1);
+                      return (
+                        <div
+                          key={index}
+                          className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 shadow-2xs"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
+                          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                            <div className="sm:col-span-6">
+                              <label className="text-[10px] text-slate-500 uppercase font-semibold">
+                                Part / Item Name *
+                              </label>
+                              <input
+                                type="text"
+                                value={part.itemName}
+                                onChange={(e) => handleUpdatePart(index, 'itemName', e.target.value)}
+                                placeholder="Part / Item Name"
+                                className="w-full bg-slate-50 border border-slate-300 rounded-btn p-2 text-xs text-slate-900 focus:outline-none focus:border-primary-500 focus:bg-white"
+                              />
+                            </div>
+                            <div className="sm:col-span-4">
+                              <label className="text-[10px] text-slate-500 uppercase font-semibold">
+                                Description (Optional)
+                              </label>
+                              <input
+                                type="text"
+                                value={part.description || ''}
+                                onChange={(e) => handleUpdatePart(index, 'description', e.target.value)}
+                                placeholder="Description"
+                                className="w-full bg-slate-50 border border-slate-300 rounded-btn p-2 text-xs text-slate-900 focus:outline-none focus:border-primary-500 focus:bg-white"
+                              />
+                            </div>
+                            <div className="sm:col-span-2 flex items-center justify-end">
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePart(index)}
+                                className="px-2.5 py-1.5 text-xs text-rose-600 hover:bg-rose-50 rounded-btn flex items-center gap-1 cursor-pointer transition-colors"
+                                title="Remove Part"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Remove</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 pt-1 border-t border-slate-100 items-center">
+                            <div className="sm:col-span-3">
+                              <label className="text-[10px] text-slate-500 uppercase font-semibold">Quantity</label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={part.quantity}
+                                onChange={(e) =>
+                                  handleUpdatePart(index, 'quantity', Math.max(1, Number(e.target.value) || 1))
+                                }
+                                className="w-full bg-slate-50 border border-slate-300 rounded-btn p-1.5 text-xs text-slate-900 font-mono text-center focus:outline-none focus:border-primary-500 focus:bg-white"
+                              />
+                            </div>
+                            <div className="sm:col-span-3">
+                              <label className="text-[10px] text-slate-500 uppercase font-semibold">Unit Price (₹)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="10"
+                                value={part.unitPrice !== undefined ? part.unitPrice : 0}
+                                onChange={(e) =>
+                                  handleUpdatePart(index, 'unitPrice', Math.max(0, parseFloat(e.target.value) || 0))
+                                }
+                                className="w-full bg-slate-50 border border-slate-300 rounded-btn p-1.5 text-xs text-slate-900 font-mono focus:outline-none focus:border-primary-500 focus:bg-white"
+                              />
+                            </div>
+                            <div className="sm:col-span-3 flex items-center pt-3">
+                              <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-700 font-medium cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(part.isWarrantyCovered)}
+                                  onChange={(e) => handleUpdatePart(index, 'isWarrantyCovered', e.target.checked)}
+                                  className="rounded border-slate-300 text-primary-600 focus:ring-0 cursor-pointer"
+                                />
+                                <span>Warranty</span>
+                              </label>
+                            </div>
+                            <div className="sm:col-span-3 text-right pt-2">
+                              <div className="text-[10px] text-slate-500 uppercase font-semibold">Line Total</div>
+                              <div className="font-mono font-bold text-slate-900 text-xs">
+                                {part.isWarrantyCovered ? (
+                                  <span className="text-emerald-600 font-semibold">₹0.00 (Warranty)</span>
+                                ) : (
+                                  `₹${lineTotal.toFixed(2)}`
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-4 text-center text-xs text-slate-500 bg-white rounded-xl border border-dashed border-slate-200">
+                    <p>No spare parts recorded.</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Click <strong>[ + Add Spare Part ]</strong> if any replacement parts or components were used.
+                    </p>
                   </div>
                 )}
               </div>
 
-              {/* Section 4: Business-Specific Fields (Universal / Extensible) */}
-              <div className="space-y-2 p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl">
-                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-purple-600" />
-                  <span>Technical Readings & Business Fields</span>
+              {/* Section 4: Manual Service Charge */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                    <Wrench className="w-3.5 h-3.5 text-primary-600" />
+                    <span>Service Charge</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500">Manual service / labor fee</span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-xs">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="50"
+                    value={serviceCharge}
+                    onChange={(e) => setServiceCharge(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full bg-white border border-slate-300 rounded-btn p-2.5 pl-7 text-xs text-slate-900 font-mono font-bold focus:outline-none focus:border-primary-500"
+                  />
+                </div>
+              </div>
+
+              {/* Section 5: GST Configuration */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="inline-flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={gstEnabled}
+                      onChange={(e) => setGstEnabled(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-slate-800">Add GST</span>
+                  </label>
+                  <span
+                    className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                      gstEnabled
+                        ? 'bg-primary-100 text-primary-800 border border-primary-200'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {gstEnabled ? 'GST Enabled' : 'GST OFF'}
+                  </span>
+                </div>
+
+                {gstEnabled && (
+                  <div className="pt-2 border-t border-slate-200 space-y-2">
+                    <label className="text-[11px] font-semibold text-slate-700">Select GST Rate</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                      {[5, 12, 18, 28].map((rate) => (
+                        <button
+                          key={rate}
+                          type="button"
+                          onClick={() => {
+                            setGstRate(rate);
+                            setIsCustomGstRate(false);
+                          }}
+                          className={`py-1.5 px-2 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                            !isCustomGstRate && gstRate === rate
+                              ? 'bg-primary-600 border-primary-600 text-white shadow-2xs'
+                              : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                          }`}
+                        >
+                          {rate}%
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomGstRate(true)}
+                        className={`py-1.5 px-2 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                          isCustomGstRate
+                            ? 'bg-primary-600 border-primary-600 text-white shadow-2xs'
+                            : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        Custom
+                      </button>
+                    </div>
+
+                    {isCustomGstRate && (
+                      <div className="pt-1">
+                        <label className="text-[10px] text-slate-500 uppercase font-semibold">
+                          Custom GST Rate (%)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.5"
+                          value={customGstRateInput}
+                          onChange={(e) => setCustomGstRateInput(e.target.value)}
+                          placeholder="e.g. 12"
+                          className="w-full bg-white border border-slate-300 rounded-btn p-2 text-xs text-slate-900 font-mono font-medium focus:outline-none focus:border-primary-500 mt-1"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Section 6: Payment Method */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-3">
+                <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                  <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Payment Method <span className="text-rose-500">*</span></span>
                 </label>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                  <div>
-                    <label className="text-[10px] text-slate-500 uppercase font-semibold">
-                      Raw Water TDS (ppm)
-                    </label>
-                    <input
-                      type="number"
-                      value={businessFields.rawWaterTds}
-                      onChange={(e) =>
-                        setBusinessFields((prev) => ({ ...prev, rawWaterTds: e.target.value }))
-                      }
-                      placeholder="e.g. 450"
-                      className="w-full bg-white border border-slate-300 rounded-btn p-2.5 text-xs text-slate-900 focus:outline-none focus:border-primary-500"
-                    />
-                  </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCompletionPaymentMethod('CASH')}
+                    className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                      completionPaymentMethod === 'CASH'
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20 shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="text-base">💵</span>
+                    <span>CASH</span>
+                  </button>
 
-                  <div>
-                    <label className="text-[10px] text-slate-500 uppercase font-semibold">
-                      Purified Water TDS (ppm)
-                    </label>
-                    <input
-                      type="number"
-                      value={businessFields.purifiedWaterTds}
-                      onChange={(e) =>
-                        setBusinessFields((prev) => ({ ...prev, purifiedWaterTds: e.target.value }))
-                      }
-                      placeholder="e.g. 25"
-                      className="w-full bg-white border border-slate-300 rounded-btn p-2.5 text-xs text-slate-900 focus:outline-none focus:border-primary-500"
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCompletionPaymentMethod('ONLINE')}
+                    className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                      completionPaymentMethod === 'ONLINE'
+                        ? 'bg-blue-50 border-blue-500 text-blue-800 ring-2 ring-blue-500/20 shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="text-base">📱</span>
+                    <span>ONLINE</span>
+                  </button>
+                </div>
 
+                {completionPaymentMethod === 'ONLINE' && (
                   <div>
                     <label className="text-[10px] text-slate-500 uppercase font-semibold">
-                      Operating Pressure (bar)
+                      Transaction Reference / ID (Optional)
                     </label>
                     <input
                       type="text"
-                      value={businessFields.pressureBar}
-                      onChange={(e) =>
-                        setBusinessFields((prev) => ({ ...prev, pressureBar: e.target.value }))
-                      }
-                      placeholder="e.g. 4.5"
-                      className="w-full bg-white border border-slate-300 rounded-btn p-2.5 text-xs text-slate-900 focus:outline-none focus:border-primary-500"
+                      value={completionPaymentReference}
+                      onChange={(e) => setCompletionPaymentReference(e.target.value)}
+                      placeholder="e.g. Transaction Ref / UTR / Reference ID"
+                      className="w-full bg-white border border-slate-300 rounded-btn p-2.5 text-xs text-slate-900 mt-1 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Section 7: Final Bill Summary */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-3">
+                <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2 text-xs">
+                  <div className="font-bold text-slate-800 text-[11px] uppercase tracking-wider pb-1 border-b border-slate-100 flex items-center justify-between">
+                    <span>Final Bill Summary</span>
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      {gstEnabled ? `GST Rate: ${effectiveGstRate}%` : 'GST: OFF'}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-slate-600">
+                    <span>Spare Parts ({partsReplaced.filter((p) => p.itemName.trim()).length})</span>
+                    <span className="font-mono font-medium">₹{partsSubtotal.toFixed(2)}</span>
+                  </div>
+
+                  <div className="flex justify-between text-slate-600">
+                    <span>Service Charge</span>
+                    <span className="font-mono font-medium">₹{parsedLabor.toFixed(2)}</span>
+                  </div>
+
+                  <div className="flex justify-between text-slate-600">
+                    <span>Subtotal</span>
+                    <span className="font-mono font-medium">₹{billSubtotal.toFixed(2)}</span>
+                  </div>
+
+                  <div className="flex justify-between text-slate-600">
+                    <span>GST {gstEnabled ? `(${effectiveGstRate}%)` : ''}</span>
+                    <span className="font-mono font-medium">
+                      {gstEnabled ? `₹${billTax.toFixed(2)}` : 'OFF (₹0.00)'}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-slate-900 font-bold text-sm pt-1.5 border-t border-slate-100">
+                    <span>Total Payable</span>
+                    <span className="font-mono text-primary-700 text-base">₹{billTotal.toFixed(2)}</span>
+                  </div>
+
+                  {/* Amount Paid Field */}
+                  <div className="pt-2 border-t border-slate-100">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[11px] font-bold text-slate-700">Amount Paid (₹)</label>
+                      <button
+                        type="button"
+                        onClick={() => setCompletionPaymentAmount(billTotal.toFixed(2))}
+                        className="text-[10px] text-primary-600 hover:underline font-semibold cursor-pointer"
+                      >
+                        Fill Full Amount
+                      </button>
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      max={billTotal}
+                      step="1"
+                      value={completionPaymentAmount !== '' ? completionPaymentAmount : billTotal.toFixed(2)}
+                      onChange={(e) => setCompletionPaymentAmount(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-btn p-2.5 text-xs text-slate-900 font-mono font-bold focus:outline-none focus:border-primary-500"
+                      placeholder={billTotal.toFixed(2)}
                     />
                   </div>
 
-                  <div>
-                    <label className="text-[10px] text-slate-500 uppercase font-semibold">
-                      Operating Temperature (°C)
-                    </label>
-                    <input
-                      type="text"
-                      value={businessFields.temperatureC}
-                      onChange={(e) =>
-                        setBusinessFields((prev) => ({ ...prev, temperatureC: e.target.value }))
-                      }
-                      placeholder="e.g. 26"
-                      className="w-full bg-white border border-slate-300 rounded-btn p-2.5 text-xs text-slate-900 focus:outline-none focus:border-primary-500"
-                    />
+                  {/* Balance & Payment Status Badge */}
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="text-[11px] text-slate-600">
+                      Remaining Balance: <span className="font-mono font-bold text-slate-900">₹{remainingNum.toFixed(2)}</span>
+                    </div>
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                        livePaymentStatus === 'PAID'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : livePaymentStatus === 'PARTIALLY PAID'
+                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                          : 'bg-slate-100 text-slate-600 border border-slate-200'
+                      }`}
+                    >
+                      {livePaymentStatus}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1520,14 +1808,188 @@ export const TechnicianServiceDetailPage: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={handleCompleteJob}
+                  onClick={() => {
+                    if (!workPerformed.trim()) {
+                      setActionError('Work performed description is required to complete this job.');
+                      return;
+                    }
+                    setIsCompletionConfirmOpen(true);
+                  }}
                   disabled={Boolean(actionLoading) || !workPerformed.trim()}
                   className="w-full sm:w-auto px-5 py-2.5 rounded-btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>
-                    {actionLoading === 'complete' ? 'COMPLETING...' : 'SUBMIT & COMPLETE JOB'}
+                    {actionLoading === 'complete' ? 'COMPLETING...' : 'REVIEW & COMPLETE JOB'}
                   </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* COMPLETION CONFIRMATION DIALOG */}
+      {isCompletionConfirmOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white border border-slate-200/90 rounded-modal p-6 w-full max-w-md space-y-4 shadow-modal my-auto">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Confirm Service Completion</h3>
+                <p className="text-xs text-slate-500">Please review before finalizing</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 leading-relaxed font-medium">
+              This will complete the service, update inventory, generate the invoice, and record the payment information.
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200/90 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Service:</span>
+                <span className="font-semibold text-slate-800">{service?.serviceNumber}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Spare Parts ({partsReplaced.filter((p) => p.itemName.trim()).length}):</span>
+                <span className="font-mono font-medium text-slate-800">₹{partsSubtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Service Charge:</span>
+                <span className="font-mono font-medium text-slate-800">₹{parsedLabor.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Subtotal:</span>
+                <span className="font-mono font-medium text-slate-800">₹{billSubtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">GST:</span>
+                <span className="font-mono font-medium text-slate-800">
+                  {gstEnabled ? `${effectiveGstRate}% (₹${billTax.toFixed(2)})` : 'OFF (₹0.00)'}
+                </span>
+              </div>
+              <div className="flex justify-between border-t border-slate-200 pt-1.5 font-bold">
+                <span className="text-slate-900">Total Invoice Amount:</span>
+                <span className="font-mono text-primary-700">₹{billTotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-slate-700">
+                <span className="text-slate-500">Payment:</span>
+                <span className="font-medium">{completionPaymentMethod} (₹{paidNum.toFixed(2)})</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsCompletionConfirmOpen(false)}
+                disabled={Boolean(actionLoading)}
+                className="px-4 py-2.5 rounded-btn bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCompleteJob}
+                disabled={Boolean(actionLoading)}
+                className="px-5 py-2.5 rounded-btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-2 shadow-2xs cursor-pointer disabled:opacity-50"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{actionLoading === 'complete' ? 'COMPLETING...' : 'Confirm & Complete Service'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* COMPLETED INVOICE MODAL (Revamp Template) */}
+      {isCompletedInvoiceModalOpen && completedInvoice && (
+        <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-white border border-slate-200/90 rounded-modal w-full max-w-4xl max-h-[92vh] flex flex-col shadow-modal my-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200">
+                  <Receipt className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Invoice Generated Successfully</h3>
+                  <p className="text-xs text-slate-500">Invoice #{completedInvoice.invoiceNumber || 'INV'}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCompletedInvoiceModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body: Revamp Template */}
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-slate-50">
+              <RevampInvoiceView
+                invoice={{
+                  ...completedInvoice,
+                  customerName: completedInvoice.customerName || service?.customer?.fullName,
+                  customerPhone: completedInvoice.customerPhone || service?.customer?.phone,
+                  customerAddress: completedInvoice.customerAddress || (service?.location ? `${service.location.addressLine1 || ''}, ${service.location.city || ''}` : undefined),
+                  items: completedInvoice.items || partsReplaced.map((p) => ({
+                    nameSnapshot: p.itemName,
+                    quantity: p.quantity,
+                    unitPriceSnapshot: p.unitPrice,
+                    lineTotal: p.lineTotal,
+                  })),
+                  totalAmount: completedInvoice.totalAmount || billTotal,
+                  paidAmount: completedInvoice.paidAmount || paidNum,
+                  outstandingAmount: completedInvoice.outstandingAmount || remainingNum,
+                }}
+              />
+            </div>
+
+            {/* Modal Footer Controls */}
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-t border-slate-200 bg-white shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  if (service?.customer?.phone) {
+                    sendInvoiceViaWhatsApp({
+                      phone: service.customer.phone,
+                      orderNumber: completedInvoice.invoiceNumber,
+                      invoiceNumber: completedInvoice.invoiceNumber,
+                      invoiceId: completedInvoice.id || '',
+                      customerName: service.customer.fullName,
+                      totalAmount: String(completedInvoice.totalAmount || billTotal),
+                      paidAmount: String(completedInvoice.paidAmount || paidNum),
+                      balanceAmount: String(completedInvoice.outstandingAmount || remainingNum),
+                    });
+                  }
+                }}
+                className="px-4 py-2.5 rounded-btn bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-semibold text-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>Share via WhatsApp</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-4 py-2.5 rounded-btn bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-semibold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                >
+                  <Printer className="w-3.5 h-3.5 text-slate-600" />
+                  <span>Print Invoice</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCompletedInvoiceModalOpen(false);
+                    navigate(TECHNICIAN_COMPLETED_ROUTE);
+                  }}
+                  className="px-5 py-2.5 rounded-btn bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Done / Back to Jobs</span>
                 </button>
               </div>
             </div>
@@ -1755,14 +2217,14 @@ export const TechnicianServiceDetailPage: React.FC = () => {
                       <div>
                         <div className="text-[10px] text-slate-400 font-semibold">Official UPI ID</div>
                         <div className="font-mono text-xs font-bold text-slate-900">
-                          {paymentBusinessDetails?.upiId || 'srenterprises@upi'}
+                          {paymentBusinessDetails?.upiId || 'billing@upi'}
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() =>
                           handleCopy(
-                            paymentBusinessDetails?.upiId || 'srenterprises@upi',
+                            paymentBusinessDetails?.upiId || 'billing@upi',
                             'upi'
                           )
                         }

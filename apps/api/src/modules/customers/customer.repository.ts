@@ -444,7 +444,7 @@ export class CustomerRepository {
           updatedAt: services.updatedAt,
           customerId: services.customerId,
           assetId: services.assetId,
-          productName: sql<string>`COALESCE(${customerAssets.customName}, ${products.name}, 'RO Purifier')`,
+          productName: sql<string>`COALESCE(${customerAssets.customName}, ${products.name}, 'Asset')`,
           productBrand: products.brand,
           serialNumber: customerAssets.serialNumber,
           technicianId: services.technicianId,

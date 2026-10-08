@@ -97,7 +97,7 @@ export function normalizeTechnicianLocation(record: any): ActiveTechnicianLocati
     technicianPhone: record.technicianPhone,
     serviceId: record.serviceId || dest?.serviceId || '',
     jobCardId: record.jobCardId || dest?.jobCardId || undefined,
-    trackingStatus: record.trackingStatus || 'ON_THE_WAY',
+    trackingStatus: record.trackingStatus || (dest || record.serviceId ? 'ON_THE_WAY' : 'ONLINE'),
     latitude: lat,
     longitude: lng,
     accuracy: record.accuracy ?? record.currentLocation?.accuracy,
@@ -639,8 +639,8 @@ export const AdminLiveTechnicianMap: React.FC<AdminLiveTechnicianMapProps> = ({
                   </span>
                 </div>
 
-                {/* Customer Context */}
-                {selectedTech.customerName && (
+                {/* Customer Context / Active Service */}
+                {selectedTech.customerName ? (
                   <div className="space-y-1">
                     <span className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">
                       Destination Customer
@@ -653,23 +653,32 @@ export const AdminLiveTechnicianMap: React.FC<AdminLiveTechnicianMapProps> = ({
                       </p>
                     )}
                   </div>
+                ) : (
+                  <div className="space-y-1">
+                    <span className="text-slate-400 text-[10px] font-semibold uppercase tracking-wider">
+                      Active Service
+                    </span>
+                    <p className="text-[11px] text-slate-500 italic">No active service</p>
+                  </div>
                 )}
 
-                {/* Distance & ETA from Routes API */}
-                <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                  <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Road Distance</span>
-                    <span className="text-xs font-bold text-slate-800">
-                      {selectedTech.distanceKm !== undefined ? `${selectedTech.distanceKm} km` : 'Calculating...'}
-                    </span>
+                {/* Distance & ETA from Routes API (only when navigating to destination) */}
+                {selectedTech.customerName && (
+                  <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-medium">Road Distance</span>
+                      <span className="text-xs font-bold text-slate-800">
+                        {selectedTech.distanceKm !== undefined ? `${selectedTech.distanceKm} km` : 'Calculating...'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-medium">Estimated ETA</span>
+                      <span className="text-xs font-bold text-slate-800">
+                        {selectedTech.etaMinutes !== undefined ? `~${selectedTech.etaMinutes} mins` : 'Calculating...'}
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Estimated ETA</span>
-                    <span className="text-xs font-bold text-slate-800">
-                      {selectedTech.etaMinutes !== undefined ? `~${selectedTech.etaMinutes} mins` : 'Calculating...'}
-                    </span>
-                  </div>
-                </div>
+                )}
 
                 {/* Accuracy & Telemetry Details */}
                 <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
@@ -783,9 +792,13 @@ export const AdminLiveTechnicianMap: React.FC<AdminLiveTechnicianMapProps> = ({
                         </span>
                       </div>
 
-                      {tech.customerName && (
+                      {tech.customerName ? (
                         <p className="text-[11px] text-slate-600 font-medium truncate mb-1">
                           → {tech.customerName}
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 italic truncate mb-1">
+                          No active service
                         </p>
                       )}
 

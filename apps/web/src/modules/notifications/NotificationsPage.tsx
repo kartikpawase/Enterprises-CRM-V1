@@ -287,7 +287,7 @@ export const NotificationsPage: React.FC = () => {
           <Input
             label="Recipient Email Address (Optional)"
             type="email"
-            placeholder="e.g. srenterprises02015@gmail.com"
+            placeholder="e.g. admin@enterprisescrm.local"
             value={testEmailAddress}
             onChange={(e) => setTestEmailAddress(e.target.value)}
             helperText="Leave blank to use the default configured SUPPORT_EMAIL or SMTP_USER."

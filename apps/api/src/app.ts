@@ -55,10 +55,32 @@ export function buildApp(opts: FastifyServerOptions = {}): FastifyInstance {
         fontSrc: ["'self'", 'https:', 'data:'],
         formAction: ["'self'"],
         frameAncestors: ["'none'"],
-        imgSrc: ["'self'", 'data:', 'https:'],
+        imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
         objectSrc: ["'none'"],
-        scriptSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "'unsafe-eval'",
+          'https://maps.googleapis.com',
+          'https://*.googleapis.com',
+          'https://*.gstatic.com',
+          'https://*.google.com',
+        ],
         styleSrc: ["'self'", 'https:', "'unsafe-inline'"],
+        connectSrc: [
+          "'self'",
+          'https://maps.googleapis.com',
+          'https://*.googleapis.com',
+          'https://*.gstatic.com',
+          'https://*.google.com',
+          'data:',
+          'blob:',
+          'wss:',
+          'ws:',
+        ],
+        workerSrc: ["'self'", 'blob:'],
+        childSrc: ["'self'", 'blob:'],
+        frameSrc: ["'self'", 'https://www.google.com', 'https://*.google.com', 'https://maps.googleapis.com'],
       },
     },
     frameguard: { action: 'deny' },
@@ -72,6 +94,9 @@ export function buildApp(opts: FastifyServerOptions = {}): FastifyInstance {
   if (env.WEB_URL) {
     allowedOrigins.add(env.WEB_URL.replace(/\/+$/, ''));
   }
+  if (env.API_URL) {
+    allowedOrigins.add(env.API_URL.replace(/\/+$/, ''));
+  }
   if (process.env.RENDER_EXTERNAL_URL) {
     allowedOrigins.add(process.env.RENDER_EXTERNAL_URL.replace(/\/+$/, ''));
   }
@@ -84,7 +109,7 @@ export function buildApp(opts: FastifyServerOptions = {}): FastifyInstance {
 
   fastify.register(cors, {
     origin: (origin, cb) => {
-      // Allow requests with no origin (like desktop shell, mobile apps, server-to-server)
+      // Allow requests with no origin (like mobile apps, curl, server-to-server)
       if (!origin) {
         cb(null, true);
         return;
@@ -95,6 +120,10 @@ export function buildApp(opts: FastifyServerOptions = {}): FastifyInstance {
       if (!isAllowed) {
         try {
           const parsed = new URL(origin);
+          // Allow localhost / 127.0.0.1 in non-production environments
+          if (env.NODE_ENV !== 'production' && (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')) {
+            isAllowed = true;
+          }
           // Allow trusted preview/production deployments
           if (
             parsed.hostname.endsWith('.onrender.com') ||
@@ -109,9 +138,22 @@ export function buildApp(opts: FastifyServerOptions = {}): FastifyInstance {
         cb(null, true);
         return;
       }
-      cb(new Error(`CORS Not Allowed for origin: ${origin}`), false);
+      // Return false without throwing Error so Fastify cleanly sends CORS rejection header
+      cb(null, false);
     },
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-request-id',
+      'x-client-platform',
+      'Accept',
+      'Origin',
+      'X-Requested-With',
+    ],
+    exposedHeaders: ['x-request-id', 'content-disposition', 'content-type'],
     credentials: true,
+    maxAge: 86400,
   });
 
 

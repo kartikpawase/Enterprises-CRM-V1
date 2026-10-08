@@ -440,7 +440,7 @@ export class SalesRepository {
       // Top Products breakdown: aggregate by normalized product name so identical products are properly combined
       const productSalesMap = new Map<string, { id: string; name: string; amount: number; count: number }>();
       for (const item of linkedItems) {
-        const prodName = (item.productNameSnapshot || 'RO Water Purifier System').trim();
+        const prodName = (item.productNameSnapshot || 'Equipment').trim();
         const normKey = prodName.toLowerCase();
         const existing = productSalesMap.get(normKey) || {
           id: item.productId || normKey,
@@ -969,10 +969,10 @@ export class SalesRepository {
               console.log('[STEP_2_PROD_AUTO_PROVISION]', item.productName || item.sku);
               // Auto-provision product in database catalog
               const pType = (item.productType as any) || 'RO_MACHINE';
-              const prefix = pType === 'RO_MACHINE' ? 'RO' : 'SPARE';
+              const prefix = pType === 'RO_MACHINE' ? 'EQP' : 'SPARE';
               const safeSku = (item.sku && item.sku.trim()) || `${prefix}-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-              const pName = (item.productName && item.productName.trim()) || (pType === 'RO_MACHINE' ? 'RO Water Purifier' : 'Spare Part');
-              const pBrand = (item.brand && item.brand.trim()) || 'SR Enterprises';
+              const pName = (item.productName && item.productName.trim()) || (pType === 'RO_MACHINE' ? 'Equipment' : 'Spare Part');
+              const pBrand = (item.brand && item.brand.trim()) || 'Standard';
               const defaultWar = item.warrantyPeriodMonths !== undefined && item.warrantyPeriodMonths !== null ? Number(item.warrantyPeriodMonths) : (pType === 'RO_MACHINE' ? 12 : 3);
 
               const [createdProd] = await tx
@@ -1202,7 +1202,7 @@ export class SalesRepository {
       for (const item of data.items) {
         let prod = item.productId ? await productRepository.findById(item.productId) : null;
         const pType = (item.productType as any) || prod?.productType || 'RO_MACHINE';
-        const pName = item.productName || prod?.name || (pType === 'RO_MACHINE' ? 'RO Water Purifier' : 'Spare Part');
+        const pName = item.productName || prod?.name || (pType === 'RO_MACHINE' ? 'Equipment' : 'Spare Part');
         const pSku = item.sku || prod?.sku || `SKU-${Date.now().toString(36).toUpperCase()}`;
         const pId = prod?.id || item.productId || randomUUID();
 

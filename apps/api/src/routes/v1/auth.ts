@@ -146,32 +146,32 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     if (!userRecord) {
       const uname = normalizedUsername.toLowerCase();
-      if (uname === 'admin' || uname === 'admin@srenterprises.com') {
+      if (uname === 'admin' || uname === 'admin@enterprisescrm.local') {
         userRecord = {
           id: '00000000-0000-0000-0000-000000000001',
           username: 'Admin',
-          displayName: 'Ramesh Bomble',
-          email: 'admin@srenterprises.com',
+          displayName: 'Administrator',
+          email: 'admin@enterprisescrm.local',
           role: 'Super Admin' as const,
           status: 'ACTIVE' as const,
           passwordHash: null,
         };
-      } else if (uname === 'staff' || uname === 'manager' || uname === 'manager@srenterprises.com' || uname === 'staff@srenterprises.com') {
+      } else if (uname === 'staff' || uname === 'manager' || uname === 'manager@enterprisescrm.local' || uname === 'staff@enterprisescrm.local') {
         userRecord = {
           id: '00000000-0000-0000-0000-000000000002',
           username: 'manager',
-          displayName: 'Sales & Inventory Manager',
-          email: 'manager@srenterprises.com',
+          displayName: 'Operations Manager',
+          email: 'manager@enterprisescrm.local',
           role: 'Staff' as const,
           status: 'ACTIVE' as const,
           passwordHash: null,
         };
-      } else if (uname === 'tech1' || uname === 'technician' || uname === 'tech1@srenterprises.com') {
+      } else if (uname === 'tech1' || uname === 'technician' || uname === 'tech1@enterprisescrm.local') {
         userRecord = {
           id: '00000000-0000-0000-0000-000000000003',
           username: 'tech1',
-          displayName: 'Senior Field Technician (Pawan Kumar)',
-          email: 'tech1@srenterprises.com',
+          displayName: 'Field Service Technician',
+          email: 'tech1@enterprisescrm.local',
           role: 'Technician' as const,
           status: 'ACTIVE' as const,
           passwordHash: null,
@@ -423,7 +423,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
           id: session.userId,
           username: userRecord?.username ?? session.username,
           displayName: userRecord?.displayName ?? session.displayName,
-          email: userRecord?.email ?? `${session.username.toLowerCase()}@srenterprises.com`,
+          email: userRecord?.email ?? `${session.username.toLowerCase()}@enterprisescrm.local`,
           role: userRecord?.role ?? session.role,
         },
         permissions,

@@ -552,6 +552,25 @@ export class InvoicesRepository {
         ? await database.select().from(sales).where(eq(sales.id, invoice.saleId))
         : [null];
 
+      let businessDetails: any = null;
+      try {
+        const { configurationService } = await import('../system/configuration.service');
+        const biz: any = await configurationService.getBusinessSettings();
+        if (biz) {
+          businessDetails = {
+            companyName: biz.businessName || biz.legalName || 'Enterprises CRM',
+            addressLine1: biz.address || '',
+            addressLine2: '',
+            city: biz.city || '',
+            state: biz.state || '',
+            pincode: biz.postalCode || '',
+            phone: biz.phone || '',
+            email: biz.email || '',
+            gstin: biz.gstin || '',
+          };
+        }
+      } catch {}
+
       return {
         ...invoice,
         status: dynamicStatus,
@@ -561,6 +580,7 @@ export class InvoicesRepository {
         paidAmount: totalPaid.toFixed(2),
         outstandingAmount: outstandingAmount.toFixed(2),
         sale: sale ?? null,
+        businessDetails,
       };
     } catch (err) {
       console.error('[InvoicesRepository.findById ERROR]', err);

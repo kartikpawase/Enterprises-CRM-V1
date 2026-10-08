@@ -130,7 +130,7 @@ export class DuesRepository {
           addressLine1: customerAddresses.addressLine1,
           addressCity: customerAddresses.city,
           addressPostalCode: customerAddresses.postalCode,
-          productName: sql<string>`COALESCE(${customerAssets.customName}, ${products.name}, 'Water Purifier RO')`,
+          productName: sql<string>`COALESCE(${customerAssets.customName}, ${products.name}, 'Equipment')`,
           serialNumber: customerAssets.serialNumber,
           technicianId: technicians.id,
           technicianName: technicians.fullName,
@@ -210,7 +210,7 @@ export class DuesRepository {
           serviceType: m.serviceType || 'PERIODIC_MAINTENANCE',
           serviceLocation: m.serviceLocation || 'DOORSTEP',
           serviceClassification: m.serviceClassification || 'GENERAL',
-          machineModel: m.productName || 'Water Purifier RO',
+          machineModel: m.productName || 'Equipment',
           machineSerialNumber: m.serialNumber || null,
           scheduledDate: m.scheduledDate instanceof Date ? m.scheduledDate.toISOString() : String(m.scheduledDate),
           scheduledTimeSlot: m.scheduledTimeSlot || null,
@@ -384,7 +384,7 @@ export class DuesRepository {
         customerName: customers.fullName,
         customerPhone: customers.phone,
         customerNumber: customers.customerNumber,
-        productName: sql<string>`COALESCE(${customerAssets.customName}, ${products.name}, 'Water Purifier RO')`,
+        productName: sql<string>`COALESCE(${customerAssets.customName}, ${products.name}, 'Equipment')`,
         serialNumber: customerAssets.serialNumber,
       })
       .from(serviceSchedules)

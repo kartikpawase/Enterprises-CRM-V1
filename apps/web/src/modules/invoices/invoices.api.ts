@@ -25,6 +25,9 @@ export interface InvoiceSummaryData {
   customerNumber: string;
   customerPhone: string;
   saleId?: string | null;
+  jobCardId?: string | null;
+  serviceId?: string | null;
+  template?: string | null;
   invoiceDate: string;
   dueDate: string;
   poNumber?: string | null;

@@ -702,7 +702,7 @@ export const EditServiceModal: React.FC<EditServiceModalProps> = ({
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700">Internal Instructions</label>
                 <Textarea
-                  placeholder="e.g. Carry sediment filter & RO membrane kit..."
+                  placeholder="e.g. Carry standard toolset & replacement components..."
                   rows={2}
                   value={formData.internalNotes || ''}
                   onChange={(e) => setFormData((prev) => ({ ...prev, internalNotes: e.target.value }))}
@@ -717,7 +717,7 @@ export const EditServiceModal: React.FC<EditServiceModalProps> = ({
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700">Technician Diagnosis</label>
                 <Textarea
-                  placeholder="e.g. Carbon filter fouled, high sediment input, RO membrane choked..."
+                  placeholder="e.g. Diagnostic findings, wear and tear, component malfunction..."
                   rows={3}
                   value={formData.diagnosis || ''}
                   onChange={(e) => setFormData((prev) => ({ ...prev, diagnosis: e.target.value }))}
@@ -727,7 +727,7 @@ export const EditServiceModal: React.FC<EditServiceModalProps> = ({
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700">Work Performed</label>
                 <Textarea
-                  placeholder="e.g. Cleaned sediment pre-filter, replaced RO membrane, sanitized storage tank..."
+                  placeholder="e.g. Cleaned components, replaced worn parts, tested functionality..."
                   rows={3}
                   value={formData.workPerformed || ''}
                   onChange={(e) => setFormData((prev) => ({ ...prev, workPerformed: e.target.value }))}

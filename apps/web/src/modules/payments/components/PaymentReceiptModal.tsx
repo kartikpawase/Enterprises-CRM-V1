@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button } from '../../../components/ui/Button';
 import { useInvoiceQuery } from '../../invoices/invoices.api';
+import { usePublicSettingsQuery } from '../../settings/settings.api';
 import { formatDate } from '../../../lib/formatters';
 import type { PaymentItem } from '../payments.api';
 import { OFFICIAL_LOWER_SECTION_B64, CRM_OFFICIAL_LOGO_B64 } from '../../../assets/invoiceAssets';
@@ -20,15 +21,23 @@ export const PaymentReceiptModal: React.FC<PaymentReceiptModalProps> = ({
   if (!isOpen || !payment) return null;
 
   const { data: invoice } = useInvoiceQuery(payment.invoiceId);
+  const { data: publicSettings } = usePublicSettingsQuery();
 
   const handlePrint = () => {
     window.print();
   };
 
+  // Business Details
+  const biz = (invoice as any)?.businessDetails;
+  const companyName = biz?.companyName || publicSettings?.businessName || 'ENTERPRISES CRM';
+  const companyAddress = [biz?.addressLine1, biz?.city, biz?.state, biz?.pincode].filter(Boolean).join(', ');
+  const companyPhone = biz?.phone || publicSettings?.phone || '';
+  const companyEmail = biz?.email || publicSettings?.email || '';
+
   // Customer & Document Data
   const customerName = (invoice?.customerName || payment.customerName || 'Valued Customer').toUpperCase();
-  const customerPhone = invoice?.customerPhone || payment.customerPhone || '9766039197';
-  const invoiceNo = invoice?.invoiceNumber || payment.invoiceNumber || '82026209';
+  const customerPhone = invoice?.customerPhone || payment.customerPhone || 'N/A';
+  const invoiceNo = invoice?.invoiceNumber || payment.invoiceNumber || 'N/A';
   const rawInvoiceDate = invoice?.invoiceDate || payment.invoiceDate || payment.paymentDate;
   const invoiceDate = formatDate(rawInvoiceDate);
   const rawDueDate = invoice?.dueDate || payment.dueDate;
@@ -56,7 +65,7 @@ export const PaymentReceiptModal: React.FC<PaymentReceiptModalProps> = ({
   const totalQty = items?.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0) || 1;
 
   // Notes
-  const warrantyNotes = invoice?.notes || payment.notes || '1 Years Warranty On Ele Spears 1 Service Free';
+  const warrantyNotes = invoice?.notes || payment.notes || 'Standard Service Warranty Terms Apply';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-fast print:p-0 print:bg-transparent print:static">
@@ -122,14 +131,19 @@ export const PaymentReceiptModal: React.FC<PaymentReceiptModalProps> = ({
 
               <div className="text-center flex-1 px-2">
                 <h1 className="text-xl font-extrabold tracking-wide uppercase text-black font-sans">
-                  ENTERPRISES CRM
+                  {companyName}
                 </h1>
-                <p className="text-[10px] text-slate-800 font-medium mt-0.5">
-                  Shop A6 SaiPritam Nagari, Chatrapati Chowk Rahatani. Mo.7385059197, Pimpri-Chinchwad, Pune., Maharashtra, 411017
-                </p>
-                <p className="text-[11px] font-bold text-black mt-1">
-                  Mobile: 7385059197 &nbsp;&nbsp;&nbsp;&nbsp; Email: srenterprises02015@gmail.com
-                </p>
+                {companyAddress ? (
+                  <p className="text-[10px] text-slate-800 font-medium mt-0.5">
+                    {companyAddress}
+                  </p>
+                ) : null}
+                {(companyPhone || companyEmail) ? (
+                  <p className="text-[11px] font-bold text-black mt-1">
+                    {companyPhone ? <>Mobile: {companyPhone}&nbsp;&nbsp;&nbsp;&nbsp;</> : null}
+                    {companyEmail ? <>Email: {companyEmail}</> : null}
+                  </p>
+                ) : null}
               </div>
 
               <div className="w-16 shrink-0" />

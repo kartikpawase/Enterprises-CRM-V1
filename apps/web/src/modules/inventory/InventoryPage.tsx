@@ -629,13 +629,6 @@ export const InventoryPage: React.FC = () => {
                 <option value="Spare Parts & Components">Spare Parts & Components</option>
                 <option value="Consumables & Supplies">Consumables & Supplies</option>
                 <option value="Accessories & Tools">Accessories & Tools</option>
-                <option value="Filter">Filter</option>
-                <option value="Membrane">Membrane</option>
-                <option value="Pump">Pump</option>
-                <option value="Power Supply / SMPS">Power Supply / SMPS</option>
-                <option value="Fitting">Fitting</option>
-                <option value="Tubing">Tubing</option>
-                <option value="Accessories">Accessories</option>
                 <option value="Other">Other</option>
               </select>
 

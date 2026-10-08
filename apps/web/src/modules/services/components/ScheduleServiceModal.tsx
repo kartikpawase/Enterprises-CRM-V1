@@ -386,7 +386,7 @@ export const ScheduleServiceModal: React.FC<ScheduleServiceModalProps> = ({
               {cleanAssetSuggestions.map((a) => (
                 <option
                   key={a.id}
-                  value={a.productName || a.customName || 'RO Machine'}
+                  value={a.productName || a.customName || 'Equipment'}
                 >
                   {a.serialNumber ? `SN: ${a.serialNumber}` : a.assetNumber || ''}
                 </option>
@@ -399,7 +399,7 @@ export const ScheduleServiceModal: React.FC<ScheduleServiceModalProps> = ({
             <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
               <span className="text-[11px] text-slate-400">Quick select:</span>
               {cleanAssetSuggestions.slice(0, 4).map((a) => {
-                const label = a.productName || a.customName || 'RO Machine';
+                const label = a.productName || a.customName || 'Equipment';
                 return (
                   <button
                     key={a.id}
@@ -549,7 +549,7 @@ export const ScheduleServiceModal: React.FC<ScheduleServiceModalProps> = ({
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-700">Internal Instructions</label>
             <Textarea
-              placeholder="e.g. Carry sediment filter & RO membrane kit..."
+              placeholder="e.g. Carry standard toolset & replacement components..."
               rows={2}
               value={formData.internalNotes || ''}
               onChange={(e) => setFormData((prev) => ({ ...prev, internalNotes: e.target.value }))}

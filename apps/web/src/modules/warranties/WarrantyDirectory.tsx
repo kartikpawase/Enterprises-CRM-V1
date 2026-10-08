@@ -42,7 +42,7 @@ export const WarrantyDirectory: React.FC = () => {
       {/* Top Header */}
       <PageHeader
         title="Warranty & AMC Management"
-        description="Monitor active customer RO purifier warranties, extended AMC coverage, expiration alerts, and terms."
+        description="Monitor active customer equipment warranties, extended AMC coverage, expiration alerts, and terms."
         breadcrumbs={[
           { label: 'Dashboard', href: '/dashboard' },
           { label: 'Warranties' },

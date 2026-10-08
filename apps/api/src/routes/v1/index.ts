@@ -33,7 +33,7 @@ export const v1Routes: FastifyPluginAsync = async (fastify) => {
     return reply.status(200).send({
       success: true,
       data: {
-        message: 'SR Enterprises CRM API v1 Foundation Active',
+        message: 'Enterprises CRM API v1 Foundation Active',
         version: 'v1',
       },
     });

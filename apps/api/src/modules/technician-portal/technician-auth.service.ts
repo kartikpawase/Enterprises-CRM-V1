@@ -555,11 +555,11 @@ export class TechnicianAuthService {
     
     <div class="warning">
       <p style="margin: 0 0 8px 0;">⏰ <strong>Valid for ${params.expiresMinutes} minutes.</strong></p>
-      <p style="margin: 0;">🛡️ <strong>Security Notice:</strong> Never share this verification code with anyone. SR Enterprises administration will never ask you for your code.</p>
+      <p style="margin: 0;">🛡️ <strong>Security Notice:</strong> Never share this verification code with anyone. Enterprises CRM administration will never ask you for your code.</p>
     </div>
 
     <div class="footer">
-      SR Enterprises CRM • Field Service Operations
+      Enterprises CRM • Field Service Operations
     </div>
   </div>
 </body>
@@ -567,7 +567,7 @@ export class TechnicianAuthService {
     `.trim();
 
     const text = `
-SR Enterprises CRM — Field Technician Portal
+Enterprises CRM — Field Technician Portal
 Login Verification Code
 
 Hello ${params.technicianName},
@@ -577,7 +577,7 @@ Your verification code is: ${params.otp}
 This code is valid for ${params.expiresMinutes} minutes.
 Do NOT share this code with anyone.
 
-SR Enterprises Field Service Operations
+Enterprises CRM Field Service Operations
     `.trim();
 
     try {

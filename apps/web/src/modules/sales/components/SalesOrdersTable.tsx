@@ -30,7 +30,7 @@ export interface SalesOrderRow {
   };
   productName: string;
   productSubtext: string;
-  productType: 'ro' | 'service' | 'maintenance' | 'filter';
+  productType: 'equipment' | 'ro' | 'service' | 'maintenance' | 'filter';
   amount: string;
   status: 'Delivered' | 'Processing' | 'Pending' | 'Cancelled';
   paymentMethod: 'Paid' | 'Partially Paid' | 'COD' | 'UPI' | 'Pending';
@@ -94,11 +94,11 @@ export const SalesOrdersTable: React.FC<SalesOrdersTableProps> = ({
       },
       productName: (sale as any).items && (sale as any).items.length > 0
         ? (sale as any).items.map((i: any) => i.productNameSnapshot).join(', ')
-        : (sale as any).notes || 'RO Water Purifier',
+        : (sale as any).notes || 'Equipment',
       productSubtext: (sale as any).items && (sale as any).items.length > 0
         ? `${(sale as any).items.reduce((sum: number, i: any) => sum + (i.quantity || 1), 0)} Unit(s)`
         : '1 Unit',
-      productType: 'ro',
+      productType: 'equipment',
       amount: `₹ ${parseFloat(sale.totalAmount || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
       status: sale.status === 'COMPLETED' ? 'Delivered' : sale.status === 'CANCELLED' ? 'Cancelled' : 'Processing',
       paymentMethod:
@@ -150,6 +150,7 @@ export const SalesOrdersTable: React.FC<SalesOrdersTableProps> = ({
             <Shield className="w-4 h-4" />
           </div>
         );
+      case 'equipment':
       case 'ro':
       default:
         return (

@@ -64,7 +64,7 @@ $mailerVersion = \PHPMailer\PHPMailer\PHPMailer::VERSION;
                 </tr>
                 <tr>
                     <th>Sender Identity</th>
-                    <td><?php echo htmlspecialchars(getenv('SMTP_FROM_EMAIL') ?: 'no-reply@srenterprises.com'); ?></td>
+                    <td><?php echo htmlspecialchars(getenv('SMTP_FROM_EMAIL') ?: 'no-reply@enterprisescrm.local'); ?></td>
                 </tr>
                 <tr>
                     <th>Recipient Target</th>

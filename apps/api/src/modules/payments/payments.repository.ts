@@ -568,21 +568,27 @@ export class PaymentsRepository {
     const safeActorId = await this.resolveActorUserId(executor, actorId);
     // 1. Fetch invoice by ID or invoiceNumber
     let invoice: any = null;
-    try {
-      const [byUuid] = await executor
-        .select()
-        .from(invoices)
-        .where(eq(invoices.id, input.invoiceId));
-      if (byUuid) invoice = byUuid;
+    const isInputIdUuid = typeof input.invoiceId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.invoiceId);
 
-      if (!invoice && typeof input.invoiceId === 'string') {
+    if (isInputIdUuid) {
+      try {
+        const [byUuid] = await executor
+          .select()
+          .from(invoices)
+          .where(eq(invoices.id, input.invoiceId));
+        if (byUuid) invoice = byUuid;
+      } catch {}
+    }
+
+    if (!invoice && typeof input.invoiceId === 'string') {
+      try {
         const [byNumber] = await executor
           .select()
           .from(invoices)
           .where(eq(invoices.invoiceNumber, input.invoiceId));
         if (byNumber) invoice = byNumber;
-      }
-    } catch {}
+      } catch {}
+    }
 
     if (!invoice) {
       const memInv = memoryInvoices.find(
@@ -622,17 +628,25 @@ export class PaymentsRepository {
 
     // 2. Calculate existing valid completed payments from database
     let existingPayments: { amount: string }[] = [];
-    try {
-      existingPayments = await executor
-        .select({ amount: payments.amount })
-        .from(payments)
-        .where(
-          and(
-            eq(payments.invoiceId, invoice.id),
-            eq(payments.status, 'COMPLETED')
-          )
-        );
-    } catch {
+    const isInvoiceIdUuid = typeof invoice.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(invoice.id);
+
+    if (isInvoiceIdUuid) {
+      try {
+        existingPayments = await executor
+          .select({ amount: payments.amount })
+          .from(payments)
+          .where(
+            and(
+              eq(payments.invoiceId, invoice.id),
+              eq(payments.status, 'COMPLETED')
+            )
+          );
+      } catch {
+        existingPayments = memoryPayments
+          .filter((p) => p.invoiceId === invoice.id && p.status === 'COMPLETED')
+          .map((p) => ({ amount: String(p.amount) }));
+      }
+    } else {
       existingPayments = memoryPayments
         .filter((p) => p.invoiceId === invoice.id && p.status === 'COMPLETED')
         .map((p) => ({ amount: String(p.amount) }));
@@ -673,10 +687,28 @@ export class PaymentsRepository {
 
     // 5. Insert payment record
     let newPayment: any = null;
-    try {
-      const [inserted] = await executor
-        .insert(payments)
-        .values({
+
+    if (isInvoiceIdUuid) {
+      try {
+        const [inserted] = await executor
+          .insert(payments)
+          .values({
+            paymentNumber,
+            customerId,
+            invoiceId: invoice.id,
+            amount: String(paymentAmount),
+            paymentDate,
+            paymentMethod: input.paymentMethod,
+            status: 'COMPLETED',
+            referenceNumber: input.referenceNumber || null,
+            notes: input.notes || null,
+            createdBy: safeActorId,
+          })
+          .returning();
+        newPayment = inserted;
+      } catch {
+        newPayment = {
+          id: randomUUID(),
           paymentNumber,
           customerId,
           invoiceId: invoice.id,
@@ -687,10 +719,11 @@ export class PaymentsRepository {
           referenceNumber: input.referenceNumber || null,
           notes: input.notes || null,
           createdBy: safeActorId,
-        })
-        .returning();
-      newPayment = inserted;
-    } catch {
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+      }
+    } else {
       newPayment = {
         id: randomUUID(),
         paymentNumber,
@@ -727,16 +760,18 @@ export class PaymentsRepository {
     const nextDueDateInput = (input as any).nextPaymentDueDate || (input as any).nextPaymentDate;
     const updatedDueDate = nextDueDateInput ? new Date(nextDueDateInput) : invoice.dueDate;
 
-    try {
-      await executor
-        .update(invoices)
-        .set({
-          status: newInvoiceStatus,
-          dueDate: updatedDueDate,
-          updatedAt: now,
-        })
-        .where(eq(invoices.id, invoice.id));
-    } catch {}
+    if (isInvoiceIdUuid) {
+      try {
+        await executor
+          .update(invoices)
+          .set({
+            status: newInvoiceStatus,
+            dueDate: updatedDueDate,
+            updatedAt: now,
+          })
+          .where(eq(invoices.id, invoice.id));
+      } catch {}
+    }
 
     // Also sync to memoryInvoices
     const memInv = memoryInvoices.find((i) => i.id === invoice.id);
@@ -749,7 +784,7 @@ export class PaymentsRepository {
     }
 
     // 7. Auto-complete related payment follow-up reminders if invoice is fully paid
-    if (newInvoiceStatus === 'PAID') {
+    if (newInvoiceStatus === 'PAID' && isInvoiceIdUuid) {
       try {
         await executor
           .update(reminders)
@@ -769,36 +804,40 @@ export class PaymentsRepository {
     }
 
     // 8. Record Customer Activity
-    try {
-      await executor.insert(customerActivities).values({
-        customerId,
-        actorId: safeActorId,
-        actorName,
-        eventType: 'PAYMENT_RECEIVED',
-        entityType: 'INVOICE',
-        entityId: invoice.id,
-        description: `Payment of ₹${paymentAmount.toFixed(2)} received via ${input.paymentMethod} (Ref: ${paymentNumber})`,
-        metadata: {
-          paymentNumber,
-          amount: paymentAmount,
-          invoiceNumber: invoice.invoiceNumber,
-          remainingOutstanding,
-          invoiceStatus: newInvoiceStatus,
-        },
-      });
-    } catch {}
+    if (isInvoiceIdUuid) {
+      try {
+        await executor.insert(customerActivities).values({
+          customerId,
+          actorId: safeActorId,
+          actorName,
+          eventType: 'PAYMENT_RECEIVED',
+          entityType: 'INVOICE',
+          entityId: invoice.id,
+          description: `Payment of ₹${paymentAmount.toFixed(2)} received via ${input.paymentMethod} (Ref: ${paymentNumber})`,
+          metadata: {
+            paymentNumber,
+            amount: paymentAmount,
+            invoiceNumber: invoice.invoiceNumber,
+            remainingOutstanding,
+            invoiceStatus: newInvoiceStatus,
+          },
+        });
+      } catch {}
+    }
 
     // 9. Audit Log
-    try {
-      await executor.insert(auditLogs).values({
-        actorId: safeActorId,
-        actorUsername: actorName,
-        action: 'CREATE',
-        entityType: 'PAYMENT' as any,
-        entityId: newPayment.id,
-        afterState: newPayment,
-      });
-    } catch {}
+    if (isInvoiceIdUuid) {
+      try {
+        await executor.insert(auditLogs).values({
+          actorId: safeActorId,
+          actorUsername: actorName,
+          action: 'CREATE',
+          entityType: 'PAYMENT' as any,
+          entityId: newPayment.id,
+          afterState: newPayment,
+        });
+      } catch {}
+    }
 
     // Resilient sync to in-memory store
     memoryPayments.unshift({

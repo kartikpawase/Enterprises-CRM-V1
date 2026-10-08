@@ -385,7 +385,7 @@ export class TechnicianPaymentService {
 
     // 4. Load business details for receipt rendering
     let businessDetails: any = {
-      businessName: 'SR Enterprises',
+      businessName: 'Enterprises CRM',
     };
     try {
       const [setting] = await database
@@ -417,7 +417,7 @@ export class TechnicianPaymentService {
       notes: payment.notes || null,
       receivedByName: payment.receivedByName || undefined,
       businessDetails: {
-        businessName: businessDetails.businessName || 'SR Enterprises',
+        businessName: businessDetails.businessName || 'Enterprises CRM',
         phone: businessDetails.phone || '',
         email: businessDetails.email || '',
         address: businessDetails.address || '',

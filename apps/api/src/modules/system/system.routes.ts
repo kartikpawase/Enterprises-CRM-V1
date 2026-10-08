@@ -63,7 +63,7 @@ export const systemRoutes: FastifyPluginAsync = async (fastify) => {
       data: {
         pong: true,
         timestamp: new Date().toISOString(),
-        service: 'SR Enterprises CRM API',
+        service: 'Enterprises CRM API',
         version: 'v1',
       },
     });

@@ -103,9 +103,9 @@ const envSchema = z.object({
   SMTP_PASS: z.string().optional(),
   SMTP_SECURE: z.string().default('ssl'),
   SMTP_FROM_EMAIL: z.string().optional(),
-  SMTP_FROM_NAME: z.string().default('SR Enterprises'),
-  SUPPORT_EMAIL: z.string().default('srenterprises02015@gmail.com'),
-  SUPPORT_PHONE: z.string().default('+91 73850 59197'),
+  SMTP_FROM_NAME: z.string().default('Enterprises CRM'),
+  SUPPORT_EMAIL: z.string().default('support@enterprisescrm.local'),
+  SUPPORT_PHONE: z.string().default(''),
   MAIL_DRIVER: z.string().optional(),
   MOCK_MAIL: z.string().optional(),
 

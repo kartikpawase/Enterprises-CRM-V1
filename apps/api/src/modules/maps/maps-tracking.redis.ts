@@ -125,13 +125,15 @@ export class MapsTrackingRedisService {
       if (raw) prevRecord = JSON.parse(raw);
     } catch {}
 
-    let trackingStatus: TrackingStatus = prevRecord?.trackingStatus || TRACKING_STATUSES.ON_THE_WAY;
-    let distanceMeters: number | null = prevRecord?.distanceMeters ?? null;
-    let distanceText: string | null = prevRecord?.distanceText ?? null;
-    let etaSeconds: number | null = prevRecord?.etaSeconds ?? null;
-    let etaText: string | null = prevRecord?.etaText ?? null;
-    let arrivalPendingSince = prevRecord?.arrivalPendingSince ?? null;
-    let arrivalPendingSamples = prevRecord?.arrivalPendingSamples ?? 0;
+    let trackingStatus: TrackingStatus = destination
+      ? (prevRecord?.trackingStatus || TRACKING_STATUSES.ON_THE_WAY)
+      : TRACKING_STATUSES.ONLINE;
+    let distanceMeters: number | null = destination ? (prevRecord?.distanceMeters ?? null) : null;
+    let distanceText: string | null = destination ? (prevRecord?.distanceText ?? null) : null;
+    let etaSeconds: number | null = destination ? (prevRecord?.etaSeconds ?? null) : null;
+    let etaText: string | null = destination ? (prevRecord?.etaText ?? null) : null;
+    let arrivalPendingSince = destination ? (prevRecord?.arrivalPendingSince ?? null) : null;
+    let arrivalPendingSamples = destination ? (prevRecord?.arrivalPendingSamples ?? 0) : 0;
 
     // Perform distance and arrival calculations if destination has valid coordinates
     if (destination && destination.latitude && destination.longitude) {

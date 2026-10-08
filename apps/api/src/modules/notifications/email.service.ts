@@ -306,9 +306,9 @@ export class EmailService {
     if (itemsForPdf.length === 0) {
       itemsForPdf = [
         {
-          nameSnapshot: `Water Purifier & RO System Equipment (Invoice #${pay.invoiceNumber})`,
-          productName: `Water Purifier & RO System Equipment (Invoice #${pay.invoiceNumber})`,
-          descriptionSnapshot: 'Commercial / Residential RO Purification Spares & Services',
+          nameSnapshot: `Equipment & Services (Invoice #${pay.invoiceNumber})`,
+          productName: `Equipment & Services (Invoice #${pay.invoiceNumber})`,
+          descriptionSnapshot: 'Commercial & Residential Equipment Spares & Services',
           quantity: 1,
           unit: 'PCS',
           unitPriceSnapshot: invoiceTotal,
@@ -379,7 +379,7 @@ export class EmailService {
       idempotencyKey: `PAYMENT_RECEIPT:${pay.id}`,
       recipientEmail,
       recipientName,
-      subject: `Payment Receipt & Invoice — ${pay.invoiceNumber} — SR Enterprises`,
+      subject: `Payment Receipt & Invoice — ${pay.invoiceNumber} — Enterprises CRM`,
       payload,
       attachInvoicePdf: true,
     });
@@ -432,7 +432,7 @@ export class EmailService {
       serviceDate: srv.scheduledDate ? new Date(srv.scheduledDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       completedDate: srv.completedAt ? new Date(srv.completedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       technicianName: srv.technicianName || 'Certified Technician',
-      serviceDescription: srv.internalNotes || srv.customerNotes || 'Complete RO system health check & TDS calibration.',
+      serviceDescription: srv.internalNotes || srv.customerNotes || 'Complete service inspection & maintenance.',
       customerName: recipientName,
       customerEmail: recipientEmail,
     };
@@ -496,7 +496,7 @@ export class EmailService {
     const recipientEmail = customer?.email ? customer.email.trim().toLowerCase() : '';
     const recipientName = customer?.fullName || 'Valued Customer';
     const dateStr = srv.scheduledDate ? new Date(srv.scheduledDate).toISOString().split('T')[0] : '';
-    const machineName = srv.customAssetName || srv.productName || (srv.productBrand ? `${srv.productBrand} RO System` : 'RO Water Purifier');
+    const machineName = srv.customAssetName || srv.productName || (srv.productBrand ? `${srv.productBrand} Equipment` : 'Equipment');
 
     const payload = {
       serviceNumber: srv.serviceNumber,
@@ -715,7 +715,7 @@ export class EmailService {
       idempotencyKey: `THANK_YOU:${referenceType}:${referenceId}`,
       recipientEmail,
       recipientName,
-      subject: `Thank You for Choosing SR Enterprises!`,
+      subject: `Thank You for Choosing Enterprises CRM!`,
       payload: { referenceText, customerName: recipientName, customerEmail: recipientEmail },
     });
   }
@@ -765,7 +765,7 @@ export class EmailService {
 
     const payload = {
       warrantyNumber: war.warrantyNumber,
-      machineModel: war.assetName || 'Aquapure RO Water Purifier',
+      machineModel: war.assetName || 'Equipment',
       serialNumber: war.serialNumber,
       startDate: war.startDate ? new Date(war.startDate).toISOString().split('T')[0] : '',
       endDate: expiryDateStr,
@@ -782,7 +782,7 @@ export class EmailService {
       idempotencyKey: `WARRANTY_EXPIRY_${daysRemaining}D:${war.id}`,
       recipientEmail,
       recipientName,
-      subject: `Warranty Expiry Notice: ${daysRemaining} Days Remaining for ${war.assetName || 'RO Purifier'}`,
+      subject: `Warranty Expiry Notice: ${daysRemaining} Days Remaining for ${war.assetName || 'Equipment'}`,
       payload,
     });
   }
@@ -795,7 +795,7 @@ export class EmailService {
       eventType: 'ADMIN_TEST',
       toEmail: targetEmail,
       toName: 'CRM Administrator',
-      subject: '🧪 PHPMailer Diagnostic Test - SR Enterprises CRM',
+      subject: '🧪 PHPMailer Diagnostic Test - Enterprises CRM',
     });
   }
 

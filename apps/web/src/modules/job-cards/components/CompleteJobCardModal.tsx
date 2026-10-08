@@ -154,7 +154,7 @@ export const CompleteJobCardModal: React.FC<CompleteJobCardModalProps> = ({
                 onChange={(e) => setWorkPerformed(e.target.value)}
                 rows={2}
                 required
-                placeholder="e.g. Replaced sediment filter, cleaned membrane housing, calibrated TDS to 85 ppm..."
+                placeholder="e.g. Replaced worn components, cleaned unit housing, calibrated operational settings..."
                 className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
               />
             </div>
@@ -178,7 +178,7 @@ export const CompleteJobCardModal: React.FC<CompleteJobCardModalProps> = ({
 
             {parts.length === 0 ? (
               <p className="text-xs text-slate-700 italic bg-slate-50 p-3 rounded-xl border border-slate-100">
-                No spare parts replaced. (Click "Add Part" if filters or membranes were installed)
+                No spare parts replaced. (Click "Add Part" if replacement components were installed)
               </p>
             ) : (
               <div className="space-y-2">
@@ -186,7 +186,7 @@ export const CompleteJobCardModal: React.FC<CompleteJobCardModalProps> = ({
                   <div key={idx} className="flex flex-wrap sm:flex-nowrap items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200 text-xs">
                     <input
                       type="text"
-                      placeholder="Part Name (e.g. RO Membrane 80 GPD)"
+                      placeholder="Part Name (e.g. Replacement Module)"
                       value={p.partName}
                       onChange={(e) => handlePartChange(idx, 'partName', e.target.value)}
                       className="flex-1 min-w-[140px] px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"

@@ -1,9 +1,9 @@
 <?php
 /**
- * SR Enterprises CRM - Official Invoice & Receipt PDF Generator
+ * Enterprises CRM - Official Invoice & Receipt PDF Generator
  * 
- * Generates the EXACT official SR Enterprises Bill of Supply / Receipt template
- * on STRICTLY 1 SINGLE PAGE with pixel-perfect visual fidelity to the reference.
+ * Generates the official Bill of Supply / Receipt template
+ * on STRICTLY 1 SINGLE PAGE with pixel-perfect visual fidelity.
  */
 
 namespace SREnterprises\Mailer;
@@ -36,7 +36,7 @@ class PdfInvoiceGenerator {
     }
 
     /**
-     * Core PDF generation method for official SR Enterprises documents
+     * Core PDF generation method for official Enterprises CRM documents
      */
     public static function generateDocumentPdf(array $docData, string $docTypePrefix = 'Invoice'): array {
         try {
@@ -48,7 +48,8 @@ class PdfInvoiceGenerator {
 
             $dompdf = new Dompdf($options);
 
-            $html = self::renderOfficialDocumentHtml($docData);
+            $isRevamp = !empty($docData['serviceId']) || !empty($docData['jobCardId']) || (!empty($docData['template']) && strtoupper($docData['template']) === 'REVAMP');
+            $html = $isRevamp ? self::renderRevampInvoiceHtml($docData) : self::renderOfficialDocumentHtml($docData);
             $dompdf->loadHtml($html);
             $dompdf->setPaper('A4', 'portrait');
             $dompdf->render();
@@ -81,11 +82,32 @@ class PdfInvoiceGenerator {
     }
 
     /**
-     * Build the EXACT official SR Enterprises Bill of Supply / Receipt HTML layout on a single page
+     * Build the official Enterprises CRM Bill of Supply / Receipt HTML layout on a single page
      */
     public static function renderOfficialDocumentHtml(array $data): string {
-        $customerName = htmlspecialchars(strtoupper($data['customerName'] ?? $data['toName'] ?? 'PRABHATI FOODS PRIVATE LIMITED'));
-        $customerPhone = htmlspecialchars($data['customerPhone'] ?? $data['phone'] ?? '9989155841');
+        $biz = $data['businessDetails'] ?? [];
+        $companyName = htmlspecialchars($biz['companyName'] ?? 'Enterprises CRM');
+        $addrParts = array_filter([
+            $biz['addressLine1'] ?? '',
+            $biz['addressLine2'] ?? '',
+            $biz['city'] ?? '',
+            $biz['state'] ?? '',
+            $biz['pincode'] ?? ''
+        ]);
+        $companyAddress = htmlspecialchars(implode(', ', $addrParts));
+        $companyAddressHtml = !empty($companyAddress) ? "<div style=\"font-size: 8px; color: #111; margin-top: 2px; font-weight: 500;\">{$companyAddress}</div>" : '';
+        $companyPhone = htmlspecialchars($biz['phone'] ?? '');
+        $companyEmail = htmlspecialchars($biz['email'] ?? '');
+        $contactItems = [];
+        if ($companyPhone) $contactItems[] = "Mobile: {$companyPhone}";
+        if ($companyEmail) $contactItems[] = "Email: {$companyEmail}";
+        $contactLine = implode(' &nbsp;&nbsp;&nbsp;&nbsp; ', $contactItems);
+        $companyContactHtml = !empty($contactLine) ? "<div style=\"font-size: 9px; font-weight: bold; color: #000; margin-top: 2px;\">{$contactLine}</div>" : '';
+        $companyGstin = htmlspecialchars($biz['gstin'] ?? '');
+        $companyGstinHtml = !empty($companyGstin) ? "<div style=\"font-size: 8px; color: #111; margin-top: 1px; font-weight: bold;\">GSTIN: {$companyGstin}</div>" : '';
+
+        $customerName = htmlspecialchars(strtoupper($data['customerName'] ?? $data['toName'] ?? 'Valued Customer'));
+        $customerPhone = htmlspecialchars($data['customerPhone'] ?? $data['phone'] ?? '');
         $customerGst = !empty($data['customerGst']) ? htmlspecialchars($data['customerGst']) : (!empty($data['gstNumber']) ? htmlspecialchars($data['gstNumber']) : '');
         $gstHtml = $customerGst ? "<div style='font-size: 8px; font-weight: bold; color: #000; margin-top: 1px;'>GSTIN: {$customerGst}</div>" : '';
 
@@ -100,9 +122,7 @@ class PdfInvoiceGenerator {
         } elseif (!empty($data['customerAddress'])) {
             $supplyAddr = $data['customerAddress'];
         } elseif (!empty($data['customerCity']) || !empty($data['customerState'])) {
-            $supplyAddr = trim(($data['customerCity'] ?? '') . ', ' . ($data['customerState'] ?? 'Maharashtra'), ', ');
-        } else {
-            $supplyAddr = 'Maharashtra';
+            $supplyAddr = trim(($data['customerCity'] ?? '') . ', ' . ($data['customerState'] ?? ''), ', ');
         }
         $supplyAddress = htmlspecialchars($supplyAddr);
 
@@ -129,11 +149,11 @@ class PdfInvoiceGenerator {
         // Build item rows (up to 10 rows)
         $actualItems = !empty($items) && is_array($items) ? $items : [
             [
-                'nameSnapshot' => '25LPH Ro Plant With 18L Tank',
+                'nameSnapshot' => 'Standard Services',
                 'quantity' => 1,
                 'unit' => 'PCS',
-                'unitPriceSnapshot' => $totalAmount > 0 ? $totalAmount : 16500,
-                'lineTotal' => $totalAmount > 0 ? $totalAmount : 16500,
+                'unitPriceSnapshot' => $totalAmount > 0 ? $totalAmount : 0,
+                'lineTotal' => $totalAmount > 0 ? $totalAmount : 0,
             ]
         ];
 
@@ -143,7 +163,7 @@ class PdfInvoiceGenerator {
         for ($slotIdx = 0; $slotIdx < 10; $slotIdx++) {
             if (isset($actualItems[$slotIdx])) {
                 $item = $actualItems[$slotIdx];
-                $name = htmlspecialchars($item['nameSnapshot'] ?? $item['productName'] ?? $item['name'] ?? $item['description'] ?? '25LPH Ro Plant With 18L Tank');
+                $name = htmlspecialchars($item['nameSnapshot'] ?? $item['productName'] ?? $item['name'] ?? $item['description'] ?? 'Standard Services');
                 $qty = (int)($item['quantity'] ?? 1);
                 $unit = htmlspecialchars($item['unit'] ?? 'PCS');
                 $rate = (float)($item['unitPriceSnapshot'] ?? $item['unitPrice'] ?? $item['rate'] ?? 0);
@@ -202,7 +222,7 @@ class PdfInvoiceGenerator {
         $warrantyNotes = !empty($notesText) ? htmlspecialchars($notesText) : '';
 
         // Authoritative static lower section and logo
-        $logoSvg = InvoiceAssets::$SR_ENTERPRISES_LOGO_B64;
+        $logoSvg = self::getLogoSvgBase64();
         $lowerSectionImg = InvoiceAssets::$OFFICIAL_LOWER_SECTION_B64;
         $qrSvg = self::getQrCodeSvgBase64();
         $sigSvg = self::getSignatureSvgBase64();
@@ -212,7 +232,7 @@ class PdfInvoiceGenerator {
 <html>
 <head>
 <meta charset="utf-8">
-<title>Official Bill / Receipt - SR Enterprises</title>
+<title>Official Bill / Receipt - {$companyName}</title>
 <style>
     @page {
         size: A4 portrait;
@@ -291,19 +311,13 @@ class PdfInvoiceGenerator {
     <table class="header-table">
         <tr>
             <td style="width: 70px; vertical-align: middle; text-align: center;">
-                <img src="{$logoSvg}" style="width: 60px; height: 60px; object-fit: contain;" alt="SR Enterprises Logo" />
+                <img src="{$logoSvg}" style="width: 60px; height: 60px; object-fit: contain;" alt="Enterprises CRM Logo" />
             </td>
             <td style="text-align: center; vertical-align: middle; padding: 0 10px;">
-                <div style="font-size: 19px; font-weight: bold; color: #000; letter-spacing: 0.5px; line-height: 1.1;">SR ENTERPRISES</div>
-                <div style="font-size: 8px; color: #111; margin-top: 2px; font-weight: 500;">
-                    Shop A6 SaiPritam Nagari, Chatrapati Chowk Rahatani. Mo.7385059197
-                </div>
-                <div style="font-size: 8px; color: #111; margin-top: 1px; font-weight: 500;">
-                    Pimpri-Chinchwad, Pune., Maharashtra, 411017
-                </div>
-                <div style="font-size: 9px; font-weight: bold; color: #000; margin-top: 2px;">
-                    Mobile: 7385059197 &nbsp;&nbsp;&nbsp;&nbsp; Email: srenterprises02015@gmail.com
-                </div>
+                <div style="font-size: 19px; font-weight: bold; color: #000; letter-spacing: 0.5px; line-height: 1.1;">{$companyName}</div>
+                {$companyAddressHtml}
+                {$companyContactHtml}
+                {$companyGstinHtml}
             </td>
         </tr>
     </table>
@@ -444,11 +458,10 @@ HTML;
             <circle cx="50" cy="50" r="36" fill="#f8fafc" stroke="#1d4ed8" stroke-width="1"/>
             <path id="curveTop" d="M 20 50 A 30 30 0 0 1 80 50" fill="none"/>
             <text font-family="Arial, Helvetica, sans-serif" font-size="7.5" font-weight="bold" fill="#1d4ed8" text-anchor="middle">
-                <textPath href="#curveTop" startOffset="50%">SR ENTERPRISES</textPath>
+                <textPath href="#curveTop" startOffset="50%">ENTERPRISES CRM</textPath>
             </text>
             <circle cx="50" cy="50" r="22" fill="#1d4ed8"/>
-            <text x="50" y="56" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="900" fill="#ffffff" text-anchor="middle">SR</text>
-            <path d="M 50 28 C 47 34 44 38 44 41 C 44 44.5 46.5 47 50 47 C 53.5 47 56 44.5 56 41 C 56 38 53 34 50 28 Z" fill="#60a5fa" opacity="0.85"/>
+            <text x="50" y="56" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="900" fill="#ffffff" text-anchor="middle">CRM</text>
         </svg>';
         return 'data:image/svg+xml;base64,' . base64_encode($svg);
     }
@@ -471,4 +484,239 @@ HTML;
         </svg>';
         return 'data:image/svg+xml;base64,' . base64_encode($svg);
     }
+
+    /**
+     * Convert an Indian numerical amount to words for invoice display
+     */
+    public static function convertNumberToWords(float $number): string {
+        $no = floor($number);
+        $digits_1 = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+        $digits_2 = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+        $words = [];
+        $i = 0;
+        while ($no > 0) {
+            $divider = ($i == 2) ? 10 : 100;
+            $num = $no % $divider;
+            $no = floor($no / $divider);
+            $i += ($divider == 10) ? 1 : 2;
+            if ($num) {
+                $sub = '';
+                if ($num < 20) {
+                    $sub = $digits_1[$num];
+                } else {
+                    $sub = $digits_2[floor($num / 10)] . ' ' . $digits_1[$num % 10];
+                }
+                $unit = '';
+                if ($i == 3) $unit = ' Hundred';
+                elseif ($i == 4 || $i == 5) $unit = ' Thousand';
+                elseif ($i == 6 || $i == 7) $unit = ' Lakh';
+                elseif ($i >= 8) $unit = ' Crore';
+                
+                $words[] = trim($sub) . $unit;
+            }
+        }
+        $words = array_reverse($words);
+        $result = implode(' ', $words);
+        return trim($result) ?: 'Zero';
+    }
+
+    /**
+     * Build the EXACT official Revamp Home Appliance Repair Service Invoice HTML layout
+     * matching the user-supplied physical template with pixel-perfect visual fidelity.
+     */
+    public static function renderRevampInvoiceHtml(array $data): string {
+        $biz = $data['businessDetails'] ?? [];
+        $revampCompanyName = htmlspecialchars($biz['companyName'] ?? 'Revamp');
+        $addrParts = array_filter([
+            $biz['addressLine1'] ?? '',
+            $biz['addressLine2'] ?? '',
+            $biz['city'] ?? '',
+            $biz['state'] ?? '',
+            $biz['pincode'] ?? ''
+        ]);
+        $defaultRevampAddr = "Io Gate, Akshara International School Road, opposite Sukhwani Skylines,<br>next to Pandurangbaug Washing Center, Wakad, Pune, Pimpri-Chinchwad,<br>Maharashtra 411057";
+        $revampAddress = !empty($addrParts) ? htmlspecialchars(implode(', ', $addrParts)) : $defaultRevampAddr;
+        $revampPhone = htmlspecialchars($biz['phone'] ?? '9881647076');
+
+        $customerName = htmlspecialchars($data['customerName'] ?? (isset($data['customer']['fullName']) ? $data['customer']['fullName'] : 'Valued Customer'));
+        
+        $customerAddress = '';
+        if (!empty($data['supplyAddress'])) {
+            $customerAddress = $data['supplyAddress'];
+        } elseif (!empty($data['customerAddress'])) {
+            $customerAddress = $data['customerAddress'];
+        } elseif (!empty($data['addresses']) && is_array($data['addresses']) && !empty($data['addresses'][0])) {
+            $addr = $data['addresses'][0];
+            $parts = array_filter([$addr['addressLine1'] ?? '', $addr['city'] ?? '', $addr['state'] ?? '']);
+            $customerAddress = implode(', ', $parts);
+        } elseif (!empty($data['customer']['addresses']) && is_array($data['customer']['addresses']) && !empty($data['customer']['addresses'][0])) {
+            $addr = $data['customer']['addresses'][0];
+            $parts = array_filter([$addr['addressLine1'] ?? '', $addr['city'] ?? '', $addr['state'] ?? '']);
+            $customerAddress = implode(', ', $parts);
+        }
+        $customerAddress = htmlspecialchars($customerAddress);
+
+        $customerGst = !empty($data['customerGst']) ? htmlspecialchars($data['customerGst']) : (!empty($data['gstNumber']) ? htmlspecialchars($data['gstNumber']) : '');
+        $invoiceNo = htmlspecialchars($data['invoiceNumber'] ?? $data['invoice_number'] ?? '1079');
+        $invoiceDate = !empty($data['invoiceDate']) ? date('d/m/Y', strtotime($data['invoiceDate'])) : date('d/m/Y');
+
+        $totalAmount = (float)($data['totalAmount'] ?? $data['total_amount'] ?? 0);
+        $totalFormatted = number_format($totalAmount, 2, '.', ',');
+        $amountWords = self::convertNumberToWords($totalAmount);
+
+        $items = $data['items'] ?? [];
+        $actualItems = !empty($items) && is_array($items) ? $items : [
+            [
+                'nameSnapshot' => 'Appliance Repair & Servicing',
+                'quantity' => 1,
+                'unitPriceSnapshot' => $totalAmount > 0 ? $totalAmount : 500,
+                'lineTotal' => $totalAmount > 0 ? $totalAmount : 500,
+            ]
+        ];
+
+        $itemRows = '';
+        $sr = 1;
+        foreach ($actualItems as $item) {
+            $name = htmlspecialchars($item['nameSnapshot'] ?? $item['name'] ?? 'Service Item');
+            $qty = (int)($item['quantity'] ?? 1);
+            $rate = number_format((float)($item['unitPriceSnapshot'] ?? $item['unitPrice'] ?? 0), 2, '.', ',');
+            $amt = number_format((float)($item['lineTotal'] ?? $item['total'] ?? 0), 2, '.', ',');
+            $itemRows .= "
+            <tr style=\"height: 24px;\">
+                <td style=\"border-right: 1.5px solid #000; text-align: center; padding: 4px; vertical-align: top;\">{$sr}</td>
+                <td style=\"border-right: 1.5px solid #000; text-align: left; padding: 4px 8px; vertical-align: top;\">{$name}</td>
+                <td style=\"border-right: 1.5px solid #000; text-align: center; padding: 4px; vertical-align: top;\">{$qty}</td>
+                <td style=\"border-right: 1.5px solid #000; text-align: right; padding: 4px 8px; vertical-align: top;\">{$rate}</td>
+                <td style=\"text-align: right; padding: 4px 8px; vertical-align: top;\">{$amt}</td>
+            </tr>";
+            $sr++;
+        }
+
+        // Fill remaining height with empty rows having full-length vertical borders
+        $fillRowsCount = max(1, 10 - count($actualItems));
+        $fillHeight = min(360, max(200, $fillRowsCount * 35));
+        $itemRows .= "
+        <tr style=\"height: {$fillHeight}px;\">
+            <td style=\"border-right: 1.5px solid #000;\">&nbsp;</td>
+            <td style=\"border-right: 1.5px solid #000;\">&nbsp;</td>
+            <td style=\"border-right: 1.5px solid #000;\">&nbsp;</td>
+            <td style=\"border-right: 1.5px solid #000;\">&nbsp;</td>
+            <td>&nbsp;</td>
+        </tr>";
+
+        return <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+    @page {
+        margin: 24px 30px;
+        size: A4 portrait;
+    }
+    body {
+        font-family: Arial, Helvetica, sans-serif;
+        color: #000000;
+        margin: 0;
+        padding: 0;
+        background: #fff;
+    }
+    table {
+        border-collapse: collapse;
+        width: 100%;
+    }
+</style>
+</head>
+<body>
+
+<!-- Header Section -->
+<table style="width: 100%; margin-bottom: 8px;">
+    <tr>
+        <td style="width: 48%; vertical-align: top;">
+            <div style="font-size: 34px; font-weight: 900; color: #EB3D24; letter-spacing: -0.5px; line-height: 1;">{$revampCompanyName}</div>
+            <div style="margin-top: 4px;">
+                <span style="background-color: #0B3C7B; color: #ffffff; font-weight: bold; font-size: 11px; padding: 3px 8px; border-radius: 2px; display: inline-block;">Home Appliance Repair Service</span>
+            </div>
+            <div style="font-size: 11px; font-weight: bold; color: #0B3C7B; margin-top: 4px;">
+                Your satisfaction is our <span style="border-bottom: 2px solid #EB3D24; padding-bottom: 1px;">Priority</span>
+            </div>
+        </td>
+        <td style="width: 52%; vertical-align: top; font-size: 11px; line-height: 1.35; padding-left: 10px;">
+            {$revampAddress}<br>
+            <div style="margin-top: 6px;">
+                <strong style="font-size: 12px;">Mob No : {$revampPhone}</strong>
+            </div>
+        </td>
+    </tr>
+</table>
+
+<!-- Document Title -->
+<div style="text-align: center; font-family: 'Times New Roman', Times, serif; font-size: 26px; font-weight: bold; margin: 12px 0 10px 0;">
+    Invoice
+</div>
+
+<!-- Customer & Invoice Metadata Box -->
+<table style="border: 1.5px solid #000; margin-bottom: 10px; font-size: 12px;">
+    <tr>
+        <td style="width: 65%; border-right: 1.5px solid #000; padding: 6px 10px; vertical-align: top; line-height: 1.5;">
+            <div><strong>Customer Name : </strong>{$customerName}</div>
+            <div style="margin-top: 3px;"><strong>Address : </strong>{$customerAddress}</div>
+            <div style="margin-top: 3px;"><strong>GSTIN : </strong>{$customerGst}</div>
+        </td>
+        <td style="width: 35%; padding: 0; vertical-align: top;">
+            <div style="padding: 7px 10px; border-bottom: 1.5px solid #000;">
+                <strong>Invoice no - </strong>{$invoiceNo}
+            </div>
+            <div style="padding: 7px 10px;">
+                <strong>Date :- </strong>{$invoiceDate}
+            </div>
+        </td>
+    </tr>
+</table>
+
+<!-- Particulars / Line Items Table -->
+<table style="border: 1.5px solid #000; font-size: 12px;">
+    <thead>
+        <tr style="border-bottom: 1.5px solid #000; height: 26px;">
+            <th style="width: 8%; border-right: 1.5px solid #000; text-align: center; font-weight: bold; padding: 4px;">Sr.<br>No.</th>
+            <th style="width: 54%; border-right: 1.5px solid #000; text-align: center; font-weight: bold; padding: 4px;">PARTICULARS</th>
+            <th style="width: 10%; border-right: 1.5px solid #000; text-align: center; font-weight: bold; padding: 4px;">Qty.</th>
+            <th style="width: 14%; border-right: 1.5px solid #000; text-align: center; font-weight: bold; padding: 4px;">Rate</th>
+            <th style="width: 14%; text-align: center; font-weight: bold; padding: 4px;">Amount</th>
+        </tr>
+    </thead>
+    <tbody>
+        {$itemRows}
+        <!-- Total & Amount in Words row -->
+        <tr style="border-top: 1.5px solid #000; height: 32px;">
+            <td colspan="2" style="border-right: 1.5px solid #000; padding: 6px 10px; vertical-align: middle;">
+                <strong>Rs. </strong><span style="border-bottom: 1px solid #000; display: inline-block; min-width: 250px; padding: 0 4px;">{$amountWords}</span><strong> Only</strong>
+            </td>
+            <td colspan="3" style="padding: 6px 10px; vertical-align: middle; text-align: left;">
+                <strong>TOTAL </strong><span style="border-bottom: 1px solid #000; display: inline-block; min-width: 80px; text-align: right; padding-right: 6px;">{$totalFormatted}</span><strong> /-</strong>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- Signatures / Footer -->
+<table style="width: 100%; margin-top: 35px;">
+    <tr>
+        <td style="width: 55%; vertical-align: bottom; font-size: 12px; font-weight: bold;">
+            Customer Signature :- <span style="border-bottom: 1px solid #000; display: inline-block; width: 180px;"></span>
+        </td>
+        <td style="width: 45%; vertical-align: bottom; text-align: right;">
+            <div style="font-size: 13px; font-weight: bold; margin-bottom: 30px; padding-right: 15px;">For Revamp Services</div>
+            <div style="border-bottom: 1px solid #000; width: 160px; display: inline-block; margin-bottom: 4px;"></div>
+            <div style="font-size: 11px; padding-right: 50px;">Proprietor</div>
+        </td>
+    </tr>
+</table>
+
+</body>
+</html>
+HTML;
+    }
 }
+

@@ -144,12 +144,8 @@ test.describe('SR Enterprises CRM — Comprehensive Pre-Deployment QA Audit', ()
       await viewBtn.click();
       await expect(page).toHaveURL(/.*invoices\/.+/);
 
-      // Verify centered SR Enterprises Invoice Header
-      await expect(page.getByText('SR ENTERPRISES').first()).toBeVisible();
-      await expect(page.getByText(/7385059197/).first()).toBeVisible();
-      await expect(page.getByText(/srenterprises02015@gmail.com/).first()).toBeVisible();
-      await expect(page.getByText(/Rahatani/i).first()).toBeVisible();
-      await expect(page.getByText(/411017/).first()).toBeVisible();
+      // Verify centered Enterprises CRM Invoice Header
+      await expect(page.getByText('ENTERPRISES CRM').first()).toBeVisible();
 
       // Check Record Payment action
       const recordPaymentBtn = page.getByRole('button', { name: /Record.*Payment/i }).first();

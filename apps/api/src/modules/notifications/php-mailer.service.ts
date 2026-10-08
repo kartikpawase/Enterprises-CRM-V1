@@ -123,15 +123,15 @@ export class PhpMailerService {
     const smtpPass = (process.env.SMTP_PASS || process.env.SMTP_PASSWORD || process.env.MAIL_PASSWORD || process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
     const smtpSecure = (process.env.SMTP_SECURE || process.env.MAIL_ENCRYPTION || '').toLowerCase() === 'ssl' || smtpPort === 465;
 
-    let configuredBizName = 'SR Enterprises';
-    let configuredBizEmail = 'srenterprises02015@gmail.com';
+    let configuredBizName = 'Enterprises CRM';
+    let configuredBizEmail = '';
     try {
       const bizConfig = await configService.get<BusinessSettings>('BUSINESS');
       if (bizConfig?.businessName) configuredBizName = bizConfig.businessName;
       if (bizConfig?.email) configuredBizEmail = bizConfig.email;
     } catch {}
 
-    const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_FROM || process.env.MAIL_FROM_ADDRESS || 'no-reply@srenterprises.com';
+    const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_FROM || process.env.MAIL_FROM_ADDRESS || configuredBizEmail || 'notifications@enterprisescrm.local';
     const fromName = process.env.SMTP_FROM_NAME || process.env.MAIL_FROM_NAME || configuredBizName;
     const supportEmail = process.env.SUPPORT_EMAIL || configuredBizEmail;
 
@@ -377,10 +377,10 @@ export class PhpMailerService {
     data: Record<string, any>
   ): { subject: string; html: string; text: string } {
     const customerName = data.customerName || data.toName || data.recipientName || 'Valued Customer';
-    const companyName = process.env.COMPANY_NAME || 'SR Enterprises';
-    const supportPhone = process.env.SUPPORT_PHONE || '+91 73850 59197';
-    const supportEmail = process.env.SUPPORT_EMAIL || 'srenterprises02015@gmail.com';
-    const companyAddress = 'Shop A6 SaiPritam Nagari, Chatrapati Chowk Rahatani, Pimpri-Chinchwad, Pune 411017';
+    const companyName = process.env.COMPANY_NAME || 'Enterprises CRM';
+    const supportPhone = process.env.SUPPORT_PHONE || '';
+    const supportEmail = process.env.SUPPORT_EMAIL || 'support@enterprisescrm.local';
+    const companyAddress = '';
 
     let subject = `Notification from ${companyName}`;
     let bodyContent = '';
@@ -393,7 +393,7 @@ export class PhpMailerService {
         bodyContent = `
           <h2 style="color: #0284C7; margin-top: 0;">🎉 Thank You for Your Order!</h2>
           <p>Dear <strong>${customerName}</strong>,</p>
-          <p>We are delighted to confirm that your order <strong>#${saleNumber}</strong> has been successfully placed with SR Enterprises.</p>
+          <p>We are delighted to confirm that your order <strong>#${saleNumber}</strong> has been successfully placed with ${companyName}.</p>
           <div style="background-color: #F0F9FF; border-left: 4px solid #0284C7; padding: 12px 16px; margin: 20px 0; border-radius: 4px;">
             <p style="margin: 4px 0;"><strong>Sale Number:</strong> #${saleNumber}</p>
             <p style="margin: 4px 0;"><strong>Total Amount:</strong> ₹${totalAmount}</p>
@@ -451,13 +451,13 @@ export class PhpMailerService {
         bodyContent = `
           <h2 style="color: #059669; margin-top: 0;">🔧 Service Completed Successfully</h2>
           <p>Dear <strong>${customerName}</strong>,</p>
-          <p>Your water purifier service ticket <strong>#${serviceNumber}</strong> has been completed by our certified technician.</p>
+          <p>Your service ticket <strong>#${serviceNumber}</strong> has been completed by our certified technician.</p>
           <div style="background-color: #F0FDF4; border-left: 4px solid #059669; padding: 12px 16px; margin: 20px 0; border-radius: 4px;">
             <p style="margin: 4px 0;"><strong>Service Ticket:</strong> #${serviceNumber}</p>
-            <p style="margin: 4px 0;"><strong>Technician:</strong> ${data.technicianName || 'SR Enterprises Service Team'}</p>
-            <p style="margin: 4px 0;"><strong>Work Details:</strong> ${data.serviceDescription || 'RO System Health Check & Filter Maintenance'}</p>
+            <p style="margin: 4px 0;"><strong>Technician:</strong> ${data.technicianName || `${companyName} Service Specialist`}</p>
+            <p style="margin: 4px 0;"><strong>Work Details:</strong> ${data.serviceDescription || 'Comprehensive Inspection & Maintenance'}</p>
           </div>
-          <p>Your drinking water is purified and ready for optimal health!</p>
+          <p>Thank you for choosing ${companyName}!</p>
         `;
         break;
       }
@@ -467,11 +467,11 @@ export class PhpMailerService {
         bodyContent = `
           <h2 style="color: #0284C7; margin-top: 0;">📅 Upcoming Service Schedule</h2>
           <p>Dear <strong>${customerName}</strong>,</p>
-          <p>Your scheduled water purifier service visit is confirmed for <strong>${data.scheduledDate || 'Upcoming Date'}</strong>.</p>
+          <p>Your scheduled service visit is confirmed for <strong>${data.scheduledDate || 'Upcoming Date'}</strong>.</p>
           <div style="background-color: #F0F9FF; border-left: 4px solid #0284C7; padding: 14px 18px; margin: 20px 0; border-radius: 6px;">
             <p style="margin: 4px 0;"><strong>Service Reference:</strong> #${data.serviceNumber || 'N/A'}</p>
             <p style="margin: 4px 0;"><strong>Service Type:</strong> ${data.serviceType || 'Periodic Maintenance'}</p>
-            <p style="margin: 4px 0;"><strong>Equipment / RO Purifier:</strong> ${data.machineName || 'Water Purifier'}</p>
+            <p style="margin: 4px 0;"><strong>Equipment / Asset:</strong> ${data.machineName || 'Equipment'}</p>
             ${data.serialNumber && data.serialNumber !== 'N/A' ? `<p style="margin: 4px 0;"><strong>Serial Number:</strong> ${data.serialNumber}</p>` : ''}
             <p style="margin: 4px 0;"><strong>Visit Date:</strong> ${data.scheduledDate || 'Pending confirmation'}</p>
             <p style="margin: 4px 0;"><strong>Time Slot:</strong> ${data.timeSlot || '10:00 AM - 12:00 PM'}</p>
@@ -488,7 +488,7 @@ export class PhpMailerService {
         bodyContent = `
           <h2 style="color: #EA580C; margin-top: 0;">🛡️ Warranty Expiry Notice</h2>
           <p>Dear <strong>${customerName}</strong>,</p>
-          <p>The warranty on your water purification equipment (Model: <strong>${data.machineModel || 'RO Purifier'}</strong>) has <strong>${days} days remaining</strong>.</p>
+          <p>The warranty on your equipment (Model: <strong>${data.machineModel || 'Equipment'}</strong>) has <strong>${days} days remaining</strong>.</p>
           <div style="background-color: #FFF7ED; border-left: 4px solid #EA580C; padding: 12px 16px; margin: 20px 0; border-radius: 4px;">
             <p style="margin: 4px 0;"><strong>Serial Number:</strong> ${data.serialNumber || 'N/A'}</p>
             <p style="margin: 4px 0;"><strong>Warranty Expiry Date:</strong> ${data.endDate || 'Upcoming'}</p>
@@ -503,7 +503,7 @@ export class PhpMailerService {
         bodyContent = `
           <h2 style="color: #0284C7; margin-top: 0;">🧪 Transactional Mailer Diagnostic Test</h2>
           <p>Hello Administrator,</p>
-          <p>The SR Enterprises CRM transactional email engine is fully functional and ready to dispatch customer communications.</p>
+          <p>The ${companyName} transactional email engine is fully functional and ready to dispatch customer communications.</p>
           <div style="background-color: #F8FAFC; border-left: 4px solid #0284C7; padding: 12px 16px; margin: 20px 0; border-radius: 4px;">
             <p style="margin: 4px 0;"><strong>Engine:</strong> PHPMailer & Nodemailer Bridge</p>
             <p style="margin: 4px 0;"><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
@@ -526,7 +526,7 @@ export class PhpMailerService {
             <div style="font-family: monospace; font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #38BDF8;">${otpCode}</div>
             <div style="font-size: 12px; color: #94A3B8; margin-top: 8px;">Valid for ${expiresMinutes} minutes • Single-use code</div>
           </div>
-          <p style="color: #64748B; font-size: 12px;">🛡️ <strong>Security Notice:</strong> Never share this verification code with anyone. SR Enterprises administration will never ask you for your code.</p>
+          <p style="color: #64748B; font-size: 12px;">🛡️ <strong>Security Notice:</strong> Never share this verification code with anyone. System administration will never ask you for your code.</p>
         `;
         break;
       }
@@ -535,7 +535,7 @@ export class PhpMailerService {
         bodyContent = `
           <h2 style="color: #0284C7; margin-top: 0;">Notification from ${companyName}</h2>
           <p>Dear <strong>${customerName}</strong>,</p>
-          <p>${data.message || data.body || 'Thank you for choosing SR Enterprises.'}</p>
+          <p>${data.message || data.body || `Thank you for choosing ${companyName}.`}</p>
         `;
         break;
       }
@@ -563,7 +563,7 @@ export class PhpMailerService {
   <div class="container">
     <div class="header">
       <h1>${companyName}</h1>
-      <p>Water Purifier & RO Systems Management</p>
+      <p>Field Service &amp; Business Management</p>
     </div>
     <div class="content">
       ${bodyContent}
@@ -579,7 +579,7 @@ export class PhpMailerService {
     `.trim();
 
     const text = `
-${companyName} - Water Purifier & RO Systems Management
+${companyName} - Field Service & Business Management
 ======================================================
 ${subject}
 

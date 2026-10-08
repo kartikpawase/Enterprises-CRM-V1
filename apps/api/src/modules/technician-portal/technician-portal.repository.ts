@@ -963,7 +963,7 @@ export class TechnicianPortalRepository {
       paidAmount,
       outstandingAmount,
       status: inv?.status || 'NO_INVOICE',
-      businessName: businessSettings.businessName || 'SR Enterprises',
+      businessName: businessSettings.businessName || 'Enterprises CRM',
       upiId: businessSettings.upiId,
       upiQr: businessSettings.upiQr,
       accountName: businessSettings.accountName,

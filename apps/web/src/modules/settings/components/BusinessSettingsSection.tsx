@@ -214,7 +214,7 @@ export const BusinessSettingsSection: React.FC = () => {
               value={form.phone}
               onChange={(e) => handleChange('phone', e.target.value)}
               className="w-full px-3.5 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 font-mono text-slate-900"
-              placeholder="7385059197"
+              placeholder="9876543210"
             />
           </div>
 

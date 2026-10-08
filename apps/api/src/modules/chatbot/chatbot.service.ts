@@ -11,7 +11,7 @@ import type {
 } from '@crm/types';
 
 export const SAFE_FALLBACK_ANSWER =
-  "I don't have enough information in my current knowledge base to answer that accurately. Please contact SR Enterprises at +91 73850 59197 or srenterprises02015@gmail.com.";
+  "I don't have enough information in my current knowledge base to answer that accurately. Please contact Enterprises CRM customer support for further assistance.";
 
 // Common non-discriminative stop words to ignore during keyword matching
 const STOP_WORDS = new Set([

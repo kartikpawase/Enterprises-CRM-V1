@@ -230,7 +230,7 @@ export const CreateJobCardModal: React.FC<CreateJobCardModalProps> = ({
               onChange={(e) => setProblemReported(e.target.value)}
               rows={3}
               required
-              placeholder="e.g. Machine vibrating, water taste sour, membrane replacement required..."
+              placeholder="e.g. Unusual operational noise, performance degradation, scheduled servicing required..."
               className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
             />
           </div>

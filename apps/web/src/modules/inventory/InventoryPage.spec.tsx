@@ -49,8 +49,8 @@ const mockAnalytics = {
   topSellingItems: [
     {
       itemId: 'item-1',
-      name: 'Sediment Filter 10 Inch',
-      category: 'Filter',
+      name: 'Standard Spare Part A',
+      category: 'Electronics',
       totalQuantitySold: 20,
       totalRevenue: '7000.00',
       totalProfit: '3000.00',
@@ -59,8 +59,8 @@ const mockAnalytics = {
   topProfitableItems: [
     {
       itemId: 'item-2',
-      name: 'RO Membrane 75 GPD',
-      category: 'Membrane',
+      name: 'Replacement Module B',
+      category: 'Hardware',
       totalQuantitySold: 10,
       totalProfit: '6500.00',
       marginPercent: 43.3,
@@ -69,9 +69,9 @@ const mockAnalytics = {
   lowStockAlerts: [
     {
       id: 'item-3',
-      name: 'Kemflo Booster Pump',
-      category: 'Pump',
-      brand: 'Kemflo',
+      name: 'Power Supply Unit C',
+      category: 'Electrical',
+      brand: 'PowerCorp',
       currentStock: 1,
       minStockLevel: 3,
     },
@@ -85,10 +85,10 @@ const mockAnalytics = {
 const mockItems = [
   {
     id: 'item-1',
-    name: 'Sediment Filter 10 Inch',
-    category: 'Filter',
-    brand: 'AquaFresh',
-    partNumber: 'SF-10',
+    name: 'Standard Spare Part A',
+    category: 'Electronics',
+    brand: 'GenericBrand',
+    partNumber: 'SP-10',
     purchasePrice: 200,
     sellingPrice: 350,
     currentStock: 15,
@@ -99,10 +99,10 @@ const mockItems = [
   },
   {
     id: 'item-2',
-    name: 'RO Membrane 75 GPD',
-    category: 'Membrane',
-    brand: 'Dow Filmtec',
-    partNumber: 'MEM-75',
+    name: 'Replacement Module B',
+    category: 'Hardware',
+    brand: 'ApexTech',
+    partNumber: 'MOD-75',
     purchasePrice: 850,
     sellingPrice: 1500,
     currentStock: 1,
@@ -118,9 +118,9 @@ const mockPurchases = [
     id: 'pur-1',
     purchaseNumber: 'PUR-2026-0001',
     itemId: 'item-1',
-    itemName: 'Sediment Filter 10 Inch',
-    category: 'Filter',
-    supplierName: 'Apex Waters',
+    itemName: 'Standard Spare Part A',
+    category: 'Electronics',
+    supplierName: 'Apex Supplies',
     purchaseDate: '2026-09-01T10:00:00Z',
     quantity: 20,
     remainingQuantity: 15,
@@ -136,8 +136,8 @@ const mockSales = [
     id: 'sale-1',
     saleNumber: 'INV-SALE-2026-0001',
     itemId: 'item-1',
-    itemName: 'Sediment Filter 10 Inch',
-    category: 'Filter',
+    itemName: 'Standard Spare Part A',
+    category: 'Electronics',
     customerName: 'Kishore Kumar',
     customerPhone: '9876543210',
     saleDate: '2026-09-02T11:00:00Z',
@@ -159,8 +159,8 @@ const mockProfitLedger = [
     saleNumber: 'INV-SALE-2026-0001',
     saleDate: '2026-09-02T11:00:00Z',
     itemId: 'item-1',
-    itemName: 'Sediment Filter 10 Inch',
-    category: 'Filter',
+    itemName: 'Standard Spare Part A',
+    category: 'Electronics',
     customerName: 'Kishore Kumar',
     quantity: 5,
     purchaseCostPerUnit: 200,
@@ -238,8 +238,8 @@ describe('InventoryPage Frontend Component', () => {
     const itemsTab = screen.getByRole('button', { name: /inventory items/i });
     fireEvent.click(itemsTab);
 
-    expect(screen.getByText('Sediment Filter 10 Inch')).toBeDefined();
-    expect(screen.getByText('RO Membrane 75 GPD')).toBeDefined();
+    expect(screen.getByText('Standard Spare Part A')).toBeDefined();
+    expect(screen.getByText('Replacement Module B')).toBeDefined();
     expect(screen.getByText('15 units')).toBeDefined();
     expect(screen.getByText('1 units')).toBeDefined();
   });
@@ -251,7 +251,7 @@ describe('InventoryPage Frontend Component', () => {
     fireEvent.click(purchasesTab);
 
     expect(screen.getByText('PUR-2026-0001')).toBeDefined();
-    expect(screen.getByText('Apex Waters')).toBeDefined();
+    expect(screen.getByText('Apex Supplies')).toBeDefined();
   });
 
   it('6. Navigates to Sales tab and displays outward records', () => {
@@ -289,7 +289,7 @@ describe('InventoryPage Frontend Component', () => {
 
     expect(screen.getByText('Delete Inventory Item?')).toBeInTheDocument();
     expect(screen.getByText(/Are you sure you want to delete:/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Sediment Filter 10 Inch/i).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/Standard Spare Part A/i).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /delete item/i }).length).toBeGreaterThan(0);
   });
