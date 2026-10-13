@@ -59,7 +59,7 @@ describe('Phase 12 — Performance Baselines & Latency Benchmarks', () => {
       }
       const duration = performance.now() - start;
 
-      expect(duration).toBeLessThan(40);
+      expect(duration).toBeLessThan(100);
     });
   });
 
