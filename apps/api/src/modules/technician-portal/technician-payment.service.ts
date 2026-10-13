@@ -15,6 +15,7 @@ import { db } from '../../database/client';
 import { invoices, jobCards, services, appSettings, payments } from '../../database/schema/index';
 import { paymentsService } from '../payments/payments.service';
 import { paymentsRepository, memoryPayments } from '../payments/payments.repository';
+import { cashHandoversRepository } from '../payments/cash-handovers.repository';
 import { invoicesRepository, memoryInvoices } from '../invoices/invoices.repository';
 import { memoryJobCards } from '../job-cards/job-cards.repository';
 import { memoryServices } from '../services/services.repository';
@@ -236,6 +237,29 @@ export class TechnicianPaymentService {
     );
 
     const paymentNumber = recordResult.payment.paymentNumber;
+
+    // Authoritative Cash Handover Tracking:
+    // When physical CASH is collected by the technician, automatically create a PENDING cash handover record.
+    if (input.paymentMethod === 'CASH' && recordResult?.payment) {
+      try {
+        await cashHandoversRepository.createHandover(
+          {
+            paymentId: recordResult.payment.id,
+            serviceId: jobCard.serviceId || null,
+            jobCardId: jobCard.id || null,
+            technicianId: session.technicianId,
+            amount: Number(recordResult.payment.amount),
+            notes,
+            companyId: (session as any).companyId || null,
+            collectedAt: recordResult.payment.paymentDate ? new Date(recordResult.payment.paymentDate) : new Date(),
+          },
+          database
+        );
+      } catch (handoverErr) {
+        console.error('[TechnicianPayment] Error creating cash handover record:', handoverErr);
+      }
+    }
+
     const responseData: TechnicianRecordPaymentResponse = {
       paymentId: recordResult.payment.id,
       paymentNumber,

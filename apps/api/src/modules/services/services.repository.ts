@@ -1548,6 +1548,20 @@ export class ServicesRepository {
       });
     } catch { }
 
+    if (updateData.status === 'CANCELLED' || input.status === 'CANCELLED') {
+      try {
+        const { expensesRepository } = await import('../expenses/expenses.repository');
+        await expensesRepository.voidSparePartsExpenseForService(
+          id,
+          input.cancelReason || 'Service cancelled',
+          actorId,
+          database
+        );
+      } catch (spareVoidErr) {
+        console.warn('[ServicesRepository.updateService] Spare expense void notice:', spareVoidErr);
+      }
+    }
+
     const richService = await this.findById(id, database);
     return richService || updated;
   }
@@ -1556,7 +1570,7 @@ export class ServicesRepository {
    * Cancel service with reason
    */
   async cancelService(id: string, cancelReason: string, actorId?: string, database = db) {
-    return this.updateService(
+    const result = await this.updateService(
       id,
       {
         status: 'CANCELLED',
@@ -1565,6 +1579,20 @@ export class ServicesRepository {
       actorId,
       database
     );
+
+    try {
+      const { expensesRepository } = await import('../expenses/expenses.repository');
+      await expensesRepository.voidSparePartsExpenseForService(
+        id,
+        cancelReason || 'Service cancelled',
+        actorId,
+        database
+      );
+    } catch (spareVoidErr) {
+      console.warn('[ServicesRepository.cancelService] Spare expense void notice:', spareVoidErr);
+    }
+
+    return result;
   }
 
   /**
@@ -1599,6 +1627,7 @@ export class ServicesRepository {
       }
     } catch (err) {
       console.warn('[ServicesRepository.completeService] DB service update notice:', err);
+      if (process.env.NODE_ENV === 'production') throw err;
     }
 
     // Always update in-memory services to keep all CRM data in sync
@@ -1955,6 +1984,26 @@ export class ServicesRepository {
       } catch (schedErr) {
         console.warn('[ServicesRepository.completeService] Next service scheduling notice:', schedErr);
       }
+    }
+
+    // 7. Automatic Spare Parts Expense Recording
+    try {
+      const { expensesRepository } = await import('../expenses/expenses.repository');
+      await expensesRepository.recordSparePartsExpenseForService(
+        {
+          serviceId: id,
+          serviceNumber: existing.serviceNumber,
+          jobCardId: existing.jobCardId || updatedJobCard?.id,
+          jobCardNumber: existing.jobCardNumber || updatedJobCard?.jobCardNumber,
+          partsReplaced: input.partsReplaced || updatedJobCard?.partsReplaced || existing.partsReplaced,
+          completedAt: now,
+          companyId: existing.companyId || null,
+          actorId,
+        },
+        database
+      );
+    } catch (spareErr) {
+      console.warn('[ServicesRepository.completeService] Spare expense recording notice:', spareErr);
     }
 
     return {

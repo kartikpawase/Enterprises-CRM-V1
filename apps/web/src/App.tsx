@@ -41,6 +41,7 @@ const NotificationsPage = React.lazy(() => import('./modules/notifications/Notif
 const SettingsPage = React.lazy(() => import('./modules/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })));
 const DuesPage = React.lazy(() => import('./modules/dues/DuesPage').then((m) => ({ default: m.DuesPage })));
 const InventoryPage = React.lazy(() => import('./modules/inventory/InventoryPage').then((m) => ({ default: m.InventoryPage })));
+const ExpensesPage = React.lazy(() => import('./modules/expenses/ExpensesPage').then((m) => ({ default: m.ExpensesPage })));
 const PublicInvoicePage = React.lazy(() => import('./pages/PublicInvoicePage').then((m) => ({ default: m.PublicInvoicePage })));
 const TechnicianPortalRouter = React.lazy(() => import('./modules/technician-portal').then((m) => ({ default: m.TechnicianPortalRouter })));
 import {
@@ -308,6 +309,15 @@ function MainAppShellRouter() {
             element={
               <PermissionGuard permission="payments.view" moduleName="Payments & Collections">
                 <PaymentsDirectory />
+              </PermissionGuard>
+            }
+          />
+          {/* Expenses & Cash-in-Hand */}
+          <Route
+            path="/expenses"
+            element={
+              <PermissionGuard permission="expenses.view" moduleName="Expenses">
+                <ExpensesPage />
               </PermissionGuard>
             }
           />

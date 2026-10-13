@@ -415,6 +415,9 @@ export class BackupService {
 
       // 7. Store Artifacts in Persistent Local Backup Directory
       const localFilename = `srm_${backupId.toLowerCase()}_${dateSlug}.srmbackup`;
+      const localSrmPath = path.join(this.backupDir, localFilename);
+      await fs.promises.copyFile(tempDumpPath, localSrmPath);
+
       const localDumpCopy = path.join(this.backupDir, `${backupId}_database.sql.gz`);
       await fs.promises.copyFile(tempDumpPath, localDumpCopy);
 
@@ -439,9 +442,11 @@ export class BackupService {
 
       manifest.verificationStatus = 'VERIFIED';
       manifest.status = 'COMPLETED';
+      (manifest as any).filename = localFilename;
+      (manifest as any).storagePath = localSrmPath;
 
       // 9. Write Verified Manifest
-      const localManifestPath = path.join(this.backupDir, `${localFilename}.json`);
+      const localManifestPath = path.join(this.backupDir, `${backupId}_manifest.json`);
       await fs.promises.writeFile(localManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
 
       console.log(
@@ -502,7 +507,7 @@ export class BackupService {
               if (manifest?.backupId) {
                 itemsMap.set(manifest.backupId, {
                   ...manifest,
-                  filename: f.replace('.json', ''),
+                  filename: (manifest as any).filename || f.replace('.json', ''),
                   storagePath: (manifest as any).storagePath || '',
                 });
               }
@@ -585,29 +590,37 @@ export class BackupService {
         b.filename.toLowerCase().includes(backupIdOrFilename.toLowerCase())
     );
 
-    const downloadFilename = `${matched?.backupId || 'database'}_backup.sql.gz`;
+    const downloadFilename = `${matched?.backupId || 'database'}_backup.srmbackup`;
 
     // 1. Check if local cached copy exists
     if (matched) {
+      if (matched.filename) {
+        const srmCandidate = path.join(this.backupDir, matched.filename);
+        if (fs.existsSync(srmCandidate)) {
+          return {
+            stream: fs.createReadStream(srmCandidate),
+            filename: matched.filename.endsWith('.srmbackup') ? matched.filename : `${matched.filename}.srmbackup`,
+            contentType: 'application/octet-stream',
+          };
+        }
+      }
       const localDump = path.join(this.backupDir, `${matched.backupId}_database.sql.gz`);
       if (fs.existsSync(localDump)) {
         return {
           stream: fs.createReadStream(localDump),
           filename: downloadFilename,
-          contentType: 'application/gzip',
+          contentType: 'application/octet-stream',
         };
       }
     }
-
-
 
     // 3. Fallback: check legacy file path
     const fullPath = this.resolveBackupPath(backupIdOrFilename);
     if (fs.existsSync(fullPath)) {
       return {
         stream: fs.createReadStream(fullPath),
-        filename: path.basename(fullPath),
-        contentType: fullPath.endsWith('.sql.gz') ? 'application/gzip' : 'application/octet-stream',
+        filename: path.basename(fullPath).endsWith('.srmbackup') ? path.basename(fullPath) : `${path.basename(fullPath)}.srmbackup`,
+        contentType: 'application/octet-stream',
       };
     }
 
@@ -701,7 +714,7 @@ export class BackupService {
       isValid: false,
       integrityStatus: 'CORRUPTED',
       schemaCompatible: false,
-      validationErrors: [`Backup '${backupIdOrFilename}' not found in storage.`],
+      validationErrors: [`Backup '${backupIdOrFilename}' not found on storage.`],
     };
   }
 

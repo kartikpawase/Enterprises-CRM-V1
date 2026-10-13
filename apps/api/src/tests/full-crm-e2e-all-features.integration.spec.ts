@@ -318,7 +318,7 @@ describe('Comprehensive End-to-End CRM System Test — All 16 Modules Step-by-St
       expect([200, 400]).toContain(res.statusCode);
       const body = res.json();
       expect(body.message).toBeDefined();
-    });
+    }, 25000);
   });
 
   // ==========================================

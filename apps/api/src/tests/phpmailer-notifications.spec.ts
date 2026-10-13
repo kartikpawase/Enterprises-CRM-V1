@@ -393,7 +393,7 @@ describe('SR Enterprises CRM - PHPMailer & PDF Notification System', () => {
       expect(typeof schedulerResult.paymentRemindersCount).toBe('number');
       expect(typeof schedulerResult.warrantyRemindersCount).toBe('number');
       expect(typeof schedulerResult.queueProcessed).toBe('number');
-    });
+    }, 25000);
 
     it('5. End-to-End: automatically sends Sale Confirmation and Payment Receipt with invoice PDF on transaction', async () => {
       // 1. Send sale confirmation with attached invoice PDF

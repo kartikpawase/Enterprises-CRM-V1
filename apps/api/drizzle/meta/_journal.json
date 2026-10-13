@@ -8,6 +8,27 @@
       "when": 1786950707366,
       "tag": "0000_lumpy_vapor",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786950707367,
+      "tag": "0001_technician_portal_scaffolding",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786950707368,
+      "tag": "0002_expenses_and_schedules",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786950707369,
+      "tag": "0003_monthly_closings",
+      "breakpoints": true
     }
   ]
 }

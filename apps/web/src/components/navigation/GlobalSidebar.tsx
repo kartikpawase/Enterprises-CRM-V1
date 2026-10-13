@@ -14,6 +14,7 @@ import {
   Repeat,
   CalendarClock,
   PackageSearch,
+  Receipt,
 } from 'lucide-react';
 import { NAVIGATION_ITEMS } from '@crm/shared';
 import { useAuth } from '../../providers/AuthBoundary';
@@ -33,6 +34,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   PackageSearch,
   UserCog,
   WalletCards,
+  Receipt,
   PieChart,
   ClipboardCheck,
   Settings,
@@ -46,6 +48,7 @@ const MODULE_PERMISSIONS: Record<string, string> = {
   '/services': 'services.view',
   '/technicians': 'services.view',
   '/payments': 'payments.view',
+  '/expenses': 'expenses.view',
   '/reports': 'reports.view',
   '/tasks': 'tasks.view',
   '/settings': 'settings.manage',

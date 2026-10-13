@@ -93,6 +93,7 @@ export const JobCardDetailCard: React.FC<JobCardDetailCardProps> = ({ service })
                 <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                   <tr>
                     <th className="p-2.5 pl-3">Part Name</th>
+                    <th className="p-2.5">Source</th>
                     <th className="p-2.5">SKU</th>
                     <th className="p-2.5 text-center">Qty</th>
                     <th className="p-2.5 text-right">Unit Price</th>
@@ -101,27 +102,45 @@ export const JobCardDetailCard: React.FC<JobCardDetailCardProps> = ({ service })
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {parts.map((p, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/50">
-                      <td className="p-2.5 pl-3 font-medium text-slate-900">{p.partName}</td>
-                      <td className="p-2.5 font-mono text-slate-500">{p.partSku || '—'}</td>
-                      <td className="p-2.5 text-center">{p.quantity || 1}</td>
-                      <td className="p-2.5 text-right font-mono">₹{p.unitPrice || 0}</td>
-                      <td className="p-2.5 text-center">
-                        {p.isWarrantyCovered ? (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded">
-                            <ShieldCheck className="w-3 h-3" />
-                            Covered
+                  {parts.map((p, idx) => {
+                    const pName = p.itemName || p.partName || p.name || 'Spare Part';
+                    const isInv = Boolean(p.productId || p.inventoryItemId);
+                    const uPrice = Number(p.unitPrice ?? p.price ?? 0);
+                    const qVal = Number(p.quantity || 1);
+                    const tVal = Number(p.lineTotal ?? p.totalPrice ?? (uPrice * qVal));
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50/50">
+                        <td className="p-2.5 pl-3 font-medium text-slate-900">{pName}</td>
+                        <td className="p-2.5">
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                              isInv
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200'
+                            }`}
+                          >
+                            {isInv ? 'Inventory' : 'Manual'}
                           </span>
-                        ) : (
-                          <span className="text-[10px] text-slate-400">Billable</span>
-                        )}
-                      </td>
-                      <td className="p-2.5 text-right pr-3 font-mono font-bold text-slate-900">
-                        ₹{(p.totalPrice || 0).toLocaleString('en-IN')}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="p-2.5 font-mono text-slate-500">{p.partSku || p.sku || '—'}</td>
+                        <td className="p-2.5 text-center font-bold">{qVal}</td>
+                        <td className="p-2.5 text-right font-mono">₹{uPrice.toFixed(2)}</td>
+                        <td className="p-2.5 text-center">
+                          {p.isWarrantyCovered ? (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded">
+                              <ShieldCheck className="w-3 h-3" />
+                              Covered
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400">Billable</span>
+                          )}
+                        </td>
+                        <td className="p-2.5 text-right pr-3 font-mono font-bold text-slate-900">
+                          ₹{p.isWarrantyCovered ? '0.00' : tVal.toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -8,10 +8,10 @@ import { z } from 'zod';
 
 export const TechnicianLoginSchema = z
   .object({
-    phone: z.string().optional(),
-    mobileNumber: z.string().optional(),
-    fullName: z.string().optional(),
-    technicianName: z.string().optional(),
+    phone: z.string().nullish(),
+    mobileNumber: z.string().nullish(),
+    fullName: z.string().nullish(),
+    technicianName: z.string().nullish(),
   })
   .refine((data) => Boolean((data.phone || data.mobileNumber)?.trim()), {
     message: 'Valid registered mobile number is required',
@@ -34,75 +34,83 @@ export const TechnicianResendOtpSchema = z.object({
   challengeId: z.string().uuid('Valid challenge ID is required'),
 });
 
+export const TechnicianJobPartItemSchema = z.object({
+  itemId: z.string().nullish(),
+  productId: z.string().nullish(),
+  inventoryItemId: z.string().nullish(),
+  sku: z.string().nullish(),
+  itemName: z
+    .string({
+      required_error: 'Item name is required',
+      invalid_type_error: 'Item name must be text',
+    })
+    .min(1, 'Item name is required'),
+  partName: z.string().nullish(),
+  description: z.string().nullish(),
+  quantity: z.coerce.number().positive('Quantity must be greater than 0'),
+  isWarrantyCovered: z.boolean().nullish().transform((v) => Boolean(v)),
+  price: z.coerce.number().min(0).nullish(),
+  unitPrice: z.coerce.number().min(0).nullish(),
+  inventoryDeducted: z.boolean().nullish().transform((v) => Boolean(v)),
+  recordedAt: z.string().nullish(),
+  closedAt: z.string().nullish(),
+  status: z.string().nullish(),
+});
+
 export const TechnicianJobExecutionSchema = z.object({
-  problemReported: z.string().optional(),
-  diagnosis: z.string().optional(),
-  workPerformed: z.string().optional(),
-  technicianNotes: z.string().optional(),
-  customerRemarks: z.string().optional(),
-  partsReplaced: z
-    .array(
-      z.object({
-        itemId: z.string().optional(),
-        productId: z.string().optional(),
-        inventoryItemId: z.string().optional(),
-        sku: z.string().optional(),
-        itemName: z.string().min(1, 'Item name is required'),
-        description: z.string().optional(),
-        quantity: z.coerce.number().positive('Quantity must be greater than 0'),
-        isWarrantyCovered: z.boolean().default(false),
-        price: z.coerce.number().min(0).optional(),
-        unitPrice: z.coerce.number().min(0).optional(),
-      })
-    )
-    .optional(),
-  businessFields: z.record(z.any()).optional(),
-  customerSignatureFileId: z.string().optional(),
+  problemReported: z.string().nullish(),
+  diagnosis: z.string().nullish(),
+  workPerformed: z.string().nullish(),
+  technicianNotes: z.string().nullish(),
+  customerRemarks: z.string().nullish(),
+  partsReplaced: z.array(TechnicianJobPartItemSchema).nullish(),
+  businessFields: z.record(z.any()).nullish(),
+  customerSignatureFileId: z.string().nullish(),
 });
 
 export const TechnicianJobHoldSchema = z.object({
-  reason: z.string().optional(),
-  holdReason: z.string().optional(),
+  reason: z.string().nullish(),
+  holdReason: z.string().nullish(),
+  workPerformed: z.string().nullish(),
+  diagnosis: z.string().nullish(),
+  technicianNotes: z.string().nullish(),
+  customerRemarks: z.string().nullish(),
+  partsReplaced: z.array(TechnicianJobPartItemSchema).nullish(),
+  serviceCharge: z.coerce.number().min(0).nullish(),
+  laborCharges: z.coerce.number().min(0).nullish(),
+  gstEnabled: z.boolean().nullish().transform((v) => Boolean(v)),
+  gstRate: z.coerce.number().min(0).max(100).nullish(),
+  businessFields: z.record(z.any()).nullish(),
 });
 
 export const TechnicianJobCompleteSchema = z.object({
-  workPerformed: z.string().min(1, 'Work performed description is required before completing job'),
-  diagnosis: z.string().optional(),
-  technicianNotes: z.string().optional(),
-  customerRemarks: z.string().optional(),
-  partsReplaced: z
-    .array(
-      z.object({
-        itemId: z.string().optional(),
-        productId: z.string().optional(),
-        inventoryItemId: z.string().optional(),
-        sku: z.string().optional(),
-        itemName: z.string().min(1, 'Item name is required'),
-        description: z.string().optional(),
-        quantity: z.coerce.number().positive('Quantity must be greater than 0'),
-        isWarrantyCovered: z.boolean().default(false),
-        price: z.coerce.number().min(0).optional(),
-        unitPrice: z.coerce.number().min(0).optional(),
-      })
-    )
-    .optional(),
-  serviceCharge: z.coerce.number().min(0).optional(),
-  laborCharges: z.coerce.number().min(0).optional(),
-  gstEnabled: z.boolean().default(false),
-  gstRate: z.coerce.number().min(0).max(100).optional(),
+  workPerformed: z
+    .string({
+      required_error: 'Work performed description is required before completing job',
+      invalid_type_error: 'Work performed description is required before completing job',
+    })
+    .min(1, 'Work performed description is required before completing job'),
+  diagnosis: z.string().nullish(),
+  technicianNotes: z.string().nullish(),
+  customerRemarks: z.string().nullish(),
+  partsReplaced: z.array(TechnicianJobPartItemSchema).nullish(),
+  serviceCharge: z.coerce.number().min(0).nullish(),
+  laborCharges: z.coerce.number().min(0).nullish(),
+  gstEnabled: z.boolean().nullish().transform((v) => Boolean(v)),
+  gstRate: z.coerce.number().min(0).max(100).nullish(),
   payment: z
     .object({
       method: z.enum(['CASH', 'ONLINE', 'UPI', 'CARD', 'BANK_TRANSFER', 'CHEQUE', 'OTHER']),
       amount: z.coerce.number().min(0),
-      reference: z.string().optional().nullable(),
-      referenceNumber: z.string().optional().nullable(),
-      notes: z.string().optional().nullable(),
+      reference: z.string().nullish(),
+      referenceNumber: z.string().nullish(),
+      notes: z.string().nullish(),
     })
-    .optional(),
-  initialPayment: z.any().optional(),
-  businessFields: z.record(z.any()).optional(),
-  customerSignatureFileId: z.string().optional(),
-  customerSignatureBase64: z.string().optional(),
+    .nullish(),
+  initialPayment: z.any().nullish(),
+  businessFields: z.record(z.any()).nullish(),
+  customerSignatureFileId: z.string().nullish(),
+  customerSignatureBase64: z.string().nullish(),
 });
 
 export const TechnicianRecordPaymentSchema = z.object({
@@ -117,8 +125,8 @@ export const TechnicianRecordPaymentSchema = z.object({
 export const TechnicianQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(10),
-  status: z.string().optional(),
-  date: z.string().optional(),
+  status: z.string().nullish(),
+  date: z.string().nullish(),
 });
 
 export const TechnicianNotificationTypeEnum = z.enum([
@@ -136,8 +144,8 @@ export const TechnicianNotificationQuerySchema = z.object({
     if (val === 'true' || val === true) return true;
     if (val === 'false' || val === false) return false;
     return undefined;
-  }, z.boolean().optional()),
-  type: z.string().optional(),
+  }, z.boolean().nullish()),
+  type: z.string().nullish(),
 });
 
 export const TechnicianPersonalSummarySchema = z.object({
@@ -160,6 +168,7 @@ export const TechnicianPersonalSummarySchema = z.object({
 export type TechnicianLoginInput = z.infer<typeof TechnicianLoginSchema>;
 export type TechnicianVerifyOtpInput = z.infer<typeof TechnicianVerifyOtpSchema>;
 export type TechnicianResendOtpInput = z.infer<typeof TechnicianResendOtpSchema>;
+export type TechnicianJobPartItemInput = z.infer<typeof TechnicianJobPartItemSchema>;
 export type TechnicianJobExecutionInput = z.infer<typeof TechnicianJobExecutionSchema>;
 export type TechnicianJobHoldInput = z.infer<typeof TechnicianJobHoldSchema>;
 export type TechnicianJobCompleteInput = z.infer<typeof TechnicianJobCompleteSchema>;

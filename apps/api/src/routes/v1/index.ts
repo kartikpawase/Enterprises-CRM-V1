@@ -12,6 +12,8 @@ import { warrantiesRoutes } from '../../modules/warranties/warranties.routes';
 import { jobCardsRoutes } from '../../modules/job-cards/job-cards.routes';
 import { techniciansRoutes } from '../../modules/technicians/technicians.routes';
 import { paymentsRoutes } from '../../modules/payments/payments.routes';
+import { cashHandoversRoutes } from '../../modules/payments/cash-handovers.routes';
+import { expensesRoutes } from '../../modules/expenses/expenses.routes';
 import { remindersRoutes } from '../../modules/reminders/reminders.routes';
 import { inquiriesRoutes } from '../../modules/inquiries/inquiries.routes';
 import { publicInquiriesRoutes } from '../../modules/inquiries/public-inquiries.routes';
@@ -89,6 +91,12 @@ export const v1Routes: FastifyPluginAsync = async (fastify) => {
 
   // Payments & Financial Ledger (Phase 8)
   await fastify.register(paymentsRoutes, { prefix: '/payments' });
+
+  // Cash Handover & Technician Cash Reconciliation
+  await fastify.register(cashHandoversRoutes, { prefix: '/cash-handovers' });
+
+  // Operating Expenses & Recurring Schedules
+  await fastify.register(expensesRoutes, { prefix: '/expenses' });
 
   // Reminders & Follow-ups (Phase 8)
   await fastify.register(remindersRoutes, { prefix: '/reminders' });

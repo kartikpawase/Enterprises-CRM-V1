@@ -1443,6 +1443,151 @@ export const ChatbotMessageQuerySchema = z.object({
 });
 export type ChatbotMessageQueryInput = z.infer<typeof ChatbotMessageQuerySchema>;
 
+// ==========================================
+// 35. CASH HANDOVER SCHEMAS
+// ==========================================
+export const CashHandoverQueryFilterSchema = PaginationQuerySchema.extend({
+  technicianId: z.string().uuid().optional(),
+  status: z.enum(['ALL', 'PENDING', 'SUBMITTED', 'RECEIVED']).default('ALL'),
+  search: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+});
+export type CashHandoverQueryFilter = z.infer<typeof CashHandoverQueryFilterSchema>;
+
+export const SubmitCashHandoverSchema = z.object({
+  notes: z.string().max(500).optional(),
+});
+export type SubmitCashHandoverInput = z.infer<typeof SubmitCashHandoverSchema>;
+
+export const BatchSubmitCashHandoverSchema = z.object({
+  handoverIds: z.array(z.string().uuid()).min(1, 'At least one handover ID must be selected'),
+  notes: z.string().max(500).optional(),
+});
+export type BatchSubmitCashHandoverInput = z.infer<typeof BatchSubmitCashHandoverSchema>;
+
+export const MarkCashReceivedSchema = z.object({
+  notes: z.string().max(500).optional(),
+});
+export type MarkCashReceivedInput = z.infer<typeof MarkCashReceivedSchema>;
+
+export const BatchMarkCashReceivedSchema = z.object({
+  handoverIds: z.array(z.string().uuid()).min(1, 'At least one handover ID must be selected'),
+  notes: z.string().max(500).optional(),
+});
+export type BatchMarkCashReceivedInput = z.infer<typeof BatchMarkCashReceivedSchema>;
+
+// ==========================================
+// 36. EXPENSES SCHEMAS
+// ==========================================
+
+export const CreateExpenseSchema = z.object({
+  title: z.string().trim().min(1, 'Expense title is required').max(200),
+  category: z.string().trim().min(1, 'Category is required').max(100),
+  amount: z.coerce.number().positive('Amount must be greater than zero'),
+  expenseDate: z.string().min(1, 'Expense date is required').refine((val) => !isNaN(Date.parse(val)), 'Invalid expense date'),
+  paymentMethod: z.string().trim().min(1, 'Payment method is required'),
+  notes: z.string().max(1000).optional().nullable(),
+  recurringScheduleId: z.string().uuid().optional().nullable(),
+  occurrencePeriod: z.string().optional().nullable(),
+});
+export type CreateExpenseInput = z.infer<typeof CreateExpenseSchema>;
+
+export const UpdateExpenseSchema = z.object({
+  title: z.string().trim().min(1, 'Expense title is required').max(200).optional(),
+  category: z.string().trim().min(1, 'Category is required').max(100).optional(),
+  amount: z.coerce.number().positive('Amount must be greater than zero').optional(),
+  expenseDate: z.string().refine((val) => !isNaN(Date.parse(val)), 'Invalid expense date').optional(),
+  paymentMethod: z.string().trim().min(1, 'Payment method is required').optional(),
+  notes: z.string().max(1000).optional().nullable(),
+});
+export type UpdateExpenseInput = z.infer<typeof UpdateExpenseSchema>;
+
+export const VoidExpenseSchema = z.object({
+  reason: z.string().trim().min(1, 'Reason for voiding expense is required').max(500),
+});
+export type VoidExpenseInput = z.infer<typeof VoidExpenseSchema>;
+
+export const ExpenseQueryFilterSchema = PaginationQuerySchema.extend({
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  category: z.string().optional(),
+  paymentMethod: z.string().optional(),
+  status: z.enum(['ALL', 'RECORDED', 'VOIDED']).default('ALL'),
+  type: z.enum(['ALL', 'ONE_TIME', 'RECURRING']).default('ALL'),
+});
+export type ExpenseQueryFilter = z.infer<typeof ExpenseQueryFilterSchema>;
+
+export const CreateExpenseScheduleSchema = z.object({
+  title: z.string().trim().min(1, 'Schedule title is required').max(200),
+  category: z.string().trim().min(1, 'Category is required').max(100),
+  amount: z.coerce.number().positive('Amount must be greater than zero'),
+  frequency: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']),
+  paymentMethod: z.string().trim().min(1, 'Payment method is required'),
+  startDate: z.string().min(1, 'Start date is required'),
+  endDate: z.string().optional().nullable(),
+  notes: z.string().max(1000).optional().nullable(),
+});
+export type CreateExpenseScheduleInput = z.infer<typeof CreateExpenseScheduleSchema>;
+
+export const EXPENSE_CATEGORIES = [
+  'Spare Parts',
+  'Petrol',
+  'Business Expenses',
+  'Home Expenses',
+  'Electricity',
+  'Shop Rent',
+  'Internet / Phone',
+  'Travel',
+  'Tools & Maintenance',
+  'Other',
+] as const;
+
+export const ExpenseCategorySchema = z.enum(EXPENSE_CATEGORIES);
+export type ExpenseCategory = z.infer<typeof ExpenseCategorySchema>;
+
+export const MonthlyReconciliationQuerySchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100),
+  month: z.coerce.number().int().min(1).max(12),
+  leadProfit: z.coerce.number().min(0).optional(),
+  serviceEarnings: z.coerce.number().min(0).optional(),
+  previousClosingCash: z.coerce.number().optional(),
+  actualBankBalance: z.coerce.number().optional(),
+  savingsTransfer: z.coerce.number().min(0).optional(),
+  previousSavingsBalance: z.coerce.number().min(0).optional(),
+});
+export type MonthlyReconciliationQuery = z.infer<typeof MonthlyReconciliationQuerySchema>;
+
+export const SaveMonthlyClosingDraftSchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100),
+  month: z.coerce.number().int().min(1).max(12),
+  companyId: z.string().optional().nullable(),
+  leadProfit: z.coerce.number().min(0).optional(),
+  serviceEarnings: z.coerce.number().min(0).optional(),
+  previousClosingCash: z.coerce.number().optional(),
+  actualBankBalance: z.coerce.number().optional(),
+  savingsTransfer: z.coerce.number().min(0).optional(),
+  previousSavingsBalance: z.coerce.number().min(0).optional(),
+  notes: z.string().max(1000).optional().nullable(),
+  confirmOpeningBaseline: z.boolean().optional(),
+});
+export type SaveMonthlyClosingDraftInput = z.infer<typeof SaveMonthlyClosingDraftSchema>;
+
+export const ApproveMonthlyClosingSchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100),
+  month: z.coerce.number().int().min(1).max(12),
+  companyId: z.string().optional().nullable(),
+  leadProfit: z.coerce.number().min(0).optional(),
+  serviceEarnings: z.coerce.number().min(0).optional(),
+  previousClosingCash: z.coerce.number().optional(),
+  actualBankBalance: z.coerce.number(),
+  savingsTransfer: z.coerce.number().min(0).default(0),
+  previousSavingsBalance: z.coerce.number().min(0).optional(),
+  notes: z.string().max(1000).optional().nullable(),
+  confirmOpeningBaseline: z.boolean().optional(),
+});
+export type ApproveMonthlyClosingInput = z.infer<typeof ApproveMonthlyClosingSchema>;
+
 export * from './technician-portal';
 
 

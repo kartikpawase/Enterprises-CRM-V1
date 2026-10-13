@@ -21,6 +21,8 @@ import { customerActivities } from './activities';
 import { auditLogs } from './audit';
 import { documents } from './documents';
 import { rentals, rentalPayments, rentalEvents } from './rentals';
+import { cashHandovers } from './cash-handovers';
+import { expenses, expenseSchedules, monthlyClosings } from './expenses';
 
 /**
  * Users & RBAC Relations
@@ -192,6 +194,33 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
   }),
   createdByUser: one(users, {
     fields: [payments.createdBy],
+    references: [users.id],
+  }),
+  cashHandover: one(cashHandovers, {
+    fields: [payments.id],
+    references: [cashHandovers.paymentId],
+  }),
+}));
+
+export const cashHandoversRelations = relations(cashHandovers, ({ one }) => ({
+  payment: one(payments, {
+    fields: [cashHandovers.paymentId],
+    references: [payments.id],
+  }),
+  service: one(services, {
+    fields: [cashHandovers.serviceId],
+    references: [services.id],
+  }),
+  jobCard: one(jobCards, {
+    fields: [cashHandovers.jobCardId],
+    references: [jobCards.id],
+  }),
+  technician: one(technicians, {
+    fields: [cashHandovers.technicianId],
+    references: [technicians.id],
+  }),
+  receivedByUser: one(users, {
+    fields: [cashHandovers.receivedBy],
     references: [users.id],
   }),
 }));
@@ -464,5 +493,38 @@ export const rentalEventsRelations = relations(rentalEvents, ({ one }) => ({
   rental: one(rentals, {
     fields: [rentalEvents.rentalId],
     references: [rentals.id],
+  }),
+}));
+
+/**
+ * Expenses & Cash Management Relations
+ */
+export const expenseSchedulesRelations = relations(expenseSchedules, ({ one, many }) => ({
+  createdByUser: one(users, {
+    fields: [expenseSchedules.createdBy],
+    references: [users.id],
+  }),
+  expenses: many(expenses),
+}));
+
+export const expensesRelations = relations(expenses, ({ one }) => ({
+  recordedByUser: one(users, {
+    fields: [expenses.recordedBy],
+    references: [users.id],
+  }),
+  voidedByUser: one(users, {
+    fields: [expenses.voidedBy],
+    references: [users.id],
+  }),
+  recurringSchedule: one(expenseSchedules, {
+    fields: [expenses.recurringScheduleId],
+    references: [expenseSchedules.id],
+  }),
+}));
+
+export const monthlyClosingsRelations = relations(monthlyClosings, ({ one }) => ({
+  approvedByUser: one(users, {
+    fields: [monthlyClosings.approvedBy],
+    references: [users.id],
   }),
 }));

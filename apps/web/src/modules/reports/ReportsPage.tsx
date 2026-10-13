@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import {
   useAnalyticsOverview,
+  useFinancialSummaryQuery,
 } from '../analytics/analytics.api';
 import { useCustomersQuery } from '../customers/customer.api';
 import { useInvoicesQuery } from '../invoices/invoices.api';
@@ -28,6 +29,7 @@ import { SalesPerformanceSection } from './components/SalesPerformanceSection';
 import { CustomerInsightsSection } from './components/CustomerInsightsSection';
 import { ServicePerformanceSection } from './components/ServicePerformanceSection';
 import { FinancialOverviewSection } from './components/FinancialOverviewSection';
+import { FinancialSummarySection } from './components/FinancialSummarySection';
 import { PaymentPerformanceSection } from './components/PaymentPerformanceSection';
 import { ProductPerformanceSection } from './components/ProductPerformanceSection';
 import { TechnicianPerformanceSection } from './components/TechnicianPerformanceSection';
@@ -155,8 +157,9 @@ export const ReportsPage: React.FC = () => {
   const { data: warrantiesData, isLoading: isWarrantiesLoading, refetch: refetchWarranties } = useWarrantiesQuery({ page: 1, limit: 100 });
   const { data: servicesData, refetch: refetchServices } = useServicesQuery({ page: 1, limit: 100 });
 
-  // 2. High-level Analytics Overview Query
+  // 2. High-level Analytics Overview & Financial Summary Queries
   const { data: overview, isLoading: isOverviewLoading, refetch: refetchOverview } = useAnalyticsOverview(apiFilter);
+  const { data: financialData, isLoading: isFinancialLoading, refetch: refetchFinancial } = useFinancialSummaryQuery(apiFilter);
 
   const handleFilterChange = (updates: Partial<ReportFilterState>) => {
     setFilters((prev) => ({ ...prev, ...updates }));
@@ -176,6 +179,7 @@ export const ReportsPage: React.FC = () => {
         refetchSales(),
         refetchWarranties(),
         refetchOverview(),
+        refetchFinancial(),
       ]);
     } finally {
       setTimeout(() => setIsRefreshing(false), 400);
@@ -313,6 +317,7 @@ export const ReportsPage: React.FC = () => {
               <ServicePerformanceSection serviceData={overview?.services} />
 
               {/* Financial & Invoices Summary */}
+              <FinancialSummarySection financialData={financialData} isLoading={isFinancialLoading} />
               <FinancialOverviewSection revenueData={overview?.revenue} />
 
               {/* Top Products Table */}
@@ -623,6 +628,7 @@ export const ReportsPage: React.FC = () => {
               />
 
               {/* Invoices with payment statuses */}
+              <FinancialSummarySection financialData={financialData} isLoading={isFinancialLoading} />
               <ReportRecordsTable
                 type="invoices"
                 data={realInvoicesList}

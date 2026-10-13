@@ -68,6 +68,7 @@ export const NAVIGATION_ITEMS: NavigationItem[] = [
   { key: 'inventory', label: 'Inventory', path: '/inventory', icon: 'PackageSearch' },
   { key: 'technicians', label: 'Technicians', path: '/technicians', icon: 'UserCog' },
   { key: 'payments', label: 'Payments', path: '/payments', icon: 'WalletCards' },
+  { key: 'expenses', label: 'Expenses', path: '/expenses', icon: 'Receipt' },
   { key: 'reports', label: 'Reports', path: '/reports', icon: 'PieChart' },
   { key: 'tasks', label: 'Tasks', path: '/tasks', icon: 'ClipboardCheck' },
   { key: 'settings', label: 'Settings', path: '/settings', icon: 'Settings' },

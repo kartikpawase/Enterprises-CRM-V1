@@ -37,6 +37,10 @@ export type PermissionKey =
   | 'payments.view'
   | 'payments.create'
   | 'payments.refund'
+  | 'expenses.view'
+  | 'expenses.create'
+  | 'expenses.edit'
+  | 'expenses.delete'
   | 'tasks.view'
   | 'tasks.create'
   | 'tasks.update'
@@ -1628,6 +1632,164 @@ export interface ChatbotMessageItem {
   content: string;
   sources?: ChatbotSourceItem[] | null;
   createdAt: string | Date;
+}
+
+// ==========================================
+// EXPENSES & CASH-IN-HAND DOMAIN TYPES
+// ==========================================
+
+export const EXPENSE_CATEGORIES = [
+  'Spare Parts',
+  'Petrol',
+  'Business Expenses',
+  'Home Expenses',
+  'Electricity',
+  'Shop Rent',
+  'Internet / Phone',
+  'Travel',
+  'Tools & Maintenance',
+  'Other',
+] as const;
+
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export function isHomeExpense(category?: string | null): boolean {
+  if (!category) return false;
+  return category.trim().toLowerCase() === 'home expenses';
+}
+
+export type ExpenseFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
+export type ExpenseStatus = 'RECORDED' | 'VOIDED';
+export type MonthlyClosingStatus = 'DRAFT' | 'APPROVED';
+
+export interface MonthlyClosingRecord {
+  id: string;
+  companyId?: string | null;
+  year: number;
+  month: number;
+  leadProfit: number;
+  totalExpenses: number;
+  monthlyProfit: number;
+  previousClosingCash: number;
+  expectedCashBeforeSavings: number;
+  actualBankBalance: number;
+  reconciliationDifference: number;
+  savingsTransfer: number;
+  closingCash: number;
+  previousSavingsBalance: number;
+  currentSavingsBalance: number;
+  status: MonthlyClosingStatus;
+  approvedBy?: string | null;
+  approvedByName?: string | null;
+  approvedAt?: string | Date | null;
+  notes?: string | null;
+  categoryBreakdown?: Record<string, number> | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface MonthlyReconciliationSummary {
+  year: number;
+  month: number;
+  leadProfit: number;
+  totalExpenses: number;
+  businessExpenses: number;
+  homeExpenses: number;
+  monthlyProfit: number;
+  previousClosingCash: number;
+  expectedCashBeforeSavings: number;
+  actualBankBalance: number;
+  reconciliationDifference: number;
+  savingsTransfer: number;
+  closingCash: number;
+  previousSavingsBalance: number;
+  currentSavingsBalance: number;
+  categoryTotals: Record<string, number>;
+  serviceEarnings?: number;
+  serviceRevenueBilled?: number;
+  servicePaymentsCollected?: number;
+  completedServicesCount?: number;
+  balanceAfterExpenses?: number;
+  closingRecord?: MonthlyClosingRecord | null;
+  isClosed: boolean;
+  hasPriorApprovedClose?: boolean;
+  isOpeningPeriod?: boolean;
+}
+
+export interface ExpenseItem {
+  id: string;
+  companyId?: string | null;
+  title: string;
+  category: string;
+  amount: number;
+  expenseDate: string;
+  paymentMethod: string;
+  notes?: string | null;
+  status: ExpenseStatus;
+  recordedBy: string;
+  recordedByName?: string | null;
+  voidedBy?: string | null;
+  voidedByName?: string | null;
+  voidedAt?: string | null;
+  voidReason?: string | null;
+  recurringScheduleId?: string | null;
+  occurrencePeriod?: string | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface ExpensesListSummary {
+  totalAmount: number;
+  voidedAmount: number;
+  totalCount: number;
+}
+
+export interface ExpenseScheduleItem {
+  id: string;
+  companyId?: string | null;
+  title: string;
+  category: string;
+  amount: number;
+  frequency: ExpenseFrequency;
+  paymentMethod: string;
+  startDate: string;
+  endDate?: string | null;
+  nextDueDate: string;
+  isActive: boolean;
+  notes?: string | null;
+  createdBy: string;
+  createdByName?: string | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface ExpensesOverviewSummary {
+  expensesToday: number;
+  expensesThisWeek: number;
+  expensesThisMonth: number;
+  expensesThisYear: number;
+  pendingTechnicianCash: number;
+  cashReceivedByOwner: number;
+  shopCashMovementBalance: number;
+  cashExpensesTotal: number;
+  nonCashExpensesTotal: number;
+  activeSchedulesCount: number;
+}
+
+export interface FinancialSummaryReport {
+  period: string;
+  startDate: string;
+  endDate: string;
+  totalServiceRevenue: number;
+  totalCustomerPaymentsReceived: number;
+  totalExpenses: number;
+  cogsAmount: number;
+  grossProfit: number;
+  netProfit: number;
+  cashCollectedByTechnicians: number;
+  cashHandedOverToOwner: number;
+  pendingTechnicianCash: number;
+  shopCashMovementBalance: number;
 }
 
 export * from './technician-portal';

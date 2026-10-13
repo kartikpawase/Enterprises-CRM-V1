@@ -20,6 +20,16 @@ import {
   TECHNICIAN_PROFILE_ROUTE,
   TECHNICIAN_NOTIFICATIONS_ROUTE,
 } from '@crm/shared';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const createTestQueryClient = () =>
+  new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
 
 // Mock apiClient to control session verification
 vi.mock('@/lib/api-client', () => ({
@@ -28,6 +38,7 @@ vi.mock('@/lib/api-client', () => ({
     post: vi.fn(),
     patch: vi.fn(),
   },
+  getApiBaseUrl: vi.fn(() => 'http://localhost:3000'),
 }));
 
 describe('Technician Portal Phase 2: Authentication & Portal Shell Suite', () => {
@@ -288,9 +299,11 @@ describe('Technician Portal Phase 2: Authentication & Portal Shell Suite', () =>
 
     it('renders /technician/profile with credentials, certified skills, personal work summary, and active logout trigger', async () => {
       render(
-        <MemoryRouter>
-          <TechnicianProfilePage />
-        </MemoryRouter>
+        <QueryClientProvider client={createTestQueryClient()}>
+          <MemoryRouter>
+            <TechnicianProfilePage />
+          </MemoryRouter>
+        </QueryClientProvider>
       );
 
       expect(screen.getByRole('heading', { name: /Technician Profile/i })).toBeInTheDocument();
@@ -323,12 +336,14 @@ describe('Technician Portal Phase 2: Authentication & Portal Shell Suite', () =>
   describe('Route Resolution & Auth Protection via TechnicianPortalRouter', () => {
     const renderWithRoute = (initialPath: string) => {
       return render(
-        <MemoryRouter initialEntries={[initialPath]}>
-          <Routes>
-            <Route path="/technician/*" element={<TechnicianPortalRouter />} />
-            <Route path="/technicians" element={<div>Existing Admin Technicians Roster</div>} />
-          </Routes>
-        </MemoryRouter>
+        <QueryClientProvider client={createTestQueryClient()}>
+          <MemoryRouter initialEntries={[initialPath]}>
+            <Routes>
+              <Route path="/technician/*" element={<TechnicianPortalRouter />} />
+              <Route path="/technicians" element={<div>Existing Admin Technicians Roster</div>} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
       );
     };
 
@@ -384,12 +399,14 @@ describe('Technician Portal Phase 2: Authentication & Portal Shell Suite', () =>
   describe('Business-Agnostic Vocabulary Check', () => {
     it('contains zero hardcoded RO / Purifier / Membrane / TDS terminology in universal portal views', () => {
       const { container } = render(
-        <MemoryRouter>
-          <TechnicianDashboardPage />
-          <TechnicianServicesPage />
-          <TechnicianCompletedServicesPage />
-          <TechnicianProfilePage />
-        </MemoryRouter>
+        <QueryClientProvider client={createTestQueryClient()}>
+          <MemoryRouter>
+            <TechnicianDashboardPage />
+            <TechnicianServicesPage />
+            <TechnicianCompletedServicesPage />
+            <TechnicianProfilePage />
+          </MemoryRouter>
+        </QueryClientProvider>
       );
 
       const html = container.innerHTML;

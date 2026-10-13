@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { SplashScreenCoordinator } from './App';
 import { AuthProvider } from './providers/AuthBoundary';
@@ -70,8 +70,11 @@ describe('SplashScreenCoordinator React Integration Suite', () => {
     // Initial auth request is in flight
     expect(isCrmReadySignaled()).toBe(false);
 
-    // Let the mocked promise resolve
-    await vi.advanceTimersByTimeAsync(50);
+    // Let the mocked promise resolve and React state updates flush
+    await act(async () => {
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(50);
+    });
 
     // CRM ready has been signaled
     expect(isCrmReadySignaled()).toBe(true);
@@ -80,15 +83,21 @@ describe('SplashScreenCoordinator React Integration Suite', () => {
     expect(splash).not.toBeNull();
 
     // At 1.5s (1500ms), splash must still be visible and not fading
-    await vi.advanceTimersByTimeAsync(1500);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
     expect(splash?.classList.contains('crm-splash-fade-out')).toBe(false);
 
     // At 2.0s (additional 500ms), fade-out begins
-    await vi.advanceTimersByTimeAsync(500);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
     expect(splash?.classList.contains('crm-splash-fade-out')).toBe(true);
 
     // After fade-out transition (~650ms), element is removed from DOM
-    await vi.advanceTimersByTimeAsync(650);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(650);
+    });
     expect(isSplashScreenDismissed()).toBe(true);
     expect(document.getElementById('crm-splash-screen')).toBeNull();
   });

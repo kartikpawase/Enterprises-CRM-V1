@@ -376,6 +376,7 @@ export const JobCardDetailPage: React.FC = () => {
                       <thead className="bg-slate-50 font-semibold text-slate-600 border-b border-slate-200">
                         <tr>
                           <th className="p-2.5">Part Name</th>
+                          <th className="p-2.5">Source</th>
                           <th className="p-2.5 text-center">Qty</th>
                           <th className="p-2.5 text-right">Unit Price</th>
                           <th className="p-2.5 text-center">Coverage</th>
@@ -383,25 +384,43 @@ export const JobCardDetailPage: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {jobCard.partsReplaced.map((part: any, i: number) => (
-                          <tr key={i}>
-                            <td className="p-2.5 font-medium text-slate-900">{part.partName}</td>
-                            <td className="p-2.5 text-center">{part.quantity}</td>
-                            <td className="p-2.5 text-right">₹{(part.unitPrice || 0).toLocaleString()}</td>
-                            <td className="p-2.5 text-center">
-                              {part.isWarrantyCovered ? (
-                                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded-md text-[10px]">
-                                  Warranty
+                        {jobCard.partsReplaced.map((part: any, i: number) => {
+                          const pName = part.itemName || part.partName || 'Spare Part';
+                          const isInv = Boolean(part.productId || part.inventoryItemId);
+                          const uPrice = Number(part.unitPrice ?? part.price ?? 0);
+                          const qVal = Number(part.quantity || 1);
+                          const tVal = Number(part.lineTotal ?? part.totalPrice ?? (uPrice * qVal));
+                          return (
+                            <tr key={i}>
+                              <td className="p-2.5 font-medium text-slate-900">{pName}</td>
+                              <td className="p-2.5">
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                    isInv
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                      : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                  }`}
+                                >
+                                  {isInv ? 'Inventory' : 'Manual'}
                                 </span>
-                              ) : (
-                                <span className="text-slate-700">Chargeable</span>
-                              )}
-                            </td>
-                            <td className="p-2.5 text-right font-bold text-slate-900">
-                              ₹{part.isWarrantyCovered ? '0.00' : (part.totalPrice || 0).toLocaleString()}
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                              <td className="p-2.5 text-center">{qVal}</td>
+                              <td className="p-2.5 text-right">₹{uPrice.toFixed(2)}</td>
+                              <td className="p-2.5 text-center">
+                                {part.isWarrantyCovered ? (
+                                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded-md text-[10px]">
+                                    Warranty
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-700">Chargeable</span>
+                                )}
+                              </td>
+                              <td className="p-2.5 text-right font-bold text-slate-900">
+                                ₹{part.isWarrantyCovered ? '0.00' : tVal.toFixed(2)}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

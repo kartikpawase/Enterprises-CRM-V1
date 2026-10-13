@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: singapore
-    buildCommand: npm install -g pnpm@9.15.4 && pnpm install --frozen-lockfile && pnpm --filter @crm/web build
+    buildCommand: npm install -g pnpm@9.15.4 && pnpm install --frozen-lockfile && pnpm build:web && pnpm build:api
     startCommand: pnpm --filter @crm/api start
     healthCheckPath: /health
     autoDeploy: true

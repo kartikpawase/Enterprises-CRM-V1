@@ -4,7 +4,7 @@ import { customerService } from '../customers/customer.service';
 import { salesService } from '../sales/sales.service';
 import { servicesService } from '../services/services.service';
 import { storageEngine } from '../documents/storage-engine';
-import { customers, sales, invoices, services, jobCards, customerAssets, users } from '../../database/schema';
+import { customers, sales, invoices, services, jobCards, customerAssets, users, expenses } from '../../database/schema';
 import { eq, count, sql } from 'drizzle-orm';
 
 describe('Requested Features End-to-End Verification Tests', { timeout: 30000 }, () => {
@@ -170,6 +170,7 @@ describe('Requested Features End-to-End Verification Tests', { timeout: 30000 },
 
     // 2. Execute table wipes as done by /api/v1/system/delete-crm-database
     const allBusinessTables = [
+      'cash_handovers',
       'job_cards',
       'service_schedules',
       'services',
@@ -192,6 +193,8 @@ describe('Requested Features End-to-End Verification Tests', { timeout: 30000 },
       'inventory_items',
       'reminders',
       'technicians',
+      'expenses',
+      'expense_schedules',
       'inquiry_events',
       'inquiries',
       'whatsapp_events',
@@ -222,6 +225,9 @@ describe('Requested Features End-to-End Verification Tests', { timeout: 30000 },
 
     const [servicesCount] = await db.select({ total: count() }).from(services);
     expect(Number(servicesCount.total)).toBe(0);
+
+    const [expensesCount] = await db.select({ total: count() }).from(expenses);
+    expect(Number(expensesCount.total)).toBe(0);
 
     // 4. Verify Super Admin user still exists for uninterrupted login
     const adminUsers = await db.select().from(users).where(eq(users.username, 'admin'));

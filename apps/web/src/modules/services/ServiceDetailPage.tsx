@@ -17,6 +17,8 @@ import {
 } from './services.api';
 import { useToast } from '../../providers/ToastProvider';
 import { formatINR } from '../../lib/formatters';
+import { requestGoogleReviewViaWhatsApp } from '../../lib/whatsapp';
+import { useAuth } from '../../providers/AuthBoundary';
 import {
   User,
   Cpu,
@@ -83,6 +85,7 @@ export const ServiceDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const toast = useToast();
+  const { user, hasRole, hasPermission } = useAuth();
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
@@ -216,6 +219,40 @@ export const ServiceDetailPage: React.FC = () => {
     : 0;
   const balanceDue = Math.max(0, totalBilled - paidAmount);
   const isFullyPaid = (balanceDue <= 0.001 && paidAmount > 0) || service.invoice?.status === 'PAID';
+  const isAuthorized =
+    !user ||
+    (typeof hasRole === 'function' && hasRole('Admin', 'Super Admin')) ||
+    user?.role === 'Admin' ||
+    user?.role === 'Super Admin' ||
+    (typeof hasPermission === 'function' && (hasPermission('whatsapp.send') || hasPermission('services.update')));
+
+  const handleRequestGoogleReview = () => {
+    if (!service) return;
+    if (!isAuthorized) {
+      toast.error('You are not authorized to send WhatsApp review requests.', 'Unauthorized');
+      return;
+    }
+    if (service.status !== 'COMPLETED') {
+      toast.error('Google review requests can only be sent for completed services.', 'Service Not Completed');
+      return;
+    }
+
+    const result = requestGoogleReviewViaWhatsApp({
+      phone: service.customerPhone,
+    });
+
+    if (result.success) {
+      toast.success(
+        `WhatsApp opened with Google Review request for ${service.customerName || 'customer'}`,
+        'WhatsApp Opened'
+      );
+    } else {
+      toast.error(
+        result.error || 'Customer phone number is missing or invalid.',
+        'Invalid Phone Number'
+      );
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
@@ -293,6 +330,20 @@ export const ServiceDetailPage: React.FC = () => {
               leftIcon={<CreditCard className="w-4 h-4 text-emerald-600" />}
             >
               Record Payment
+            </Button>
+          )}
+
+          {/* Request Google Review (Only when COMPLETED) */}
+          {isCompleted && isAuthorized && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRequestGoogleReview}
+              className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-300 shadow-2xs flex items-center gap-1.5"
+              leftIcon={<MessageSquare className="w-4 h-4 text-emerald-600" />}
+              title="Open WhatsApp with Google Review request"
+            >
+              Request Google Review
             </Button>
           )}
 

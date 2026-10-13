@@ -20,6 +20,11 @@ import {
   HTTP_STATUS,
 } from '@crm/shared';
 import type { TechnicianSessionData } from '@crm/types';
+import {
+  TechnicianJobCompleteSchema,
+  TechnicianJobHoldSchema,
+  TechnicianJobExecutionSchema,
+} from '@crm/validation';
 
 describe('Technician Portal Phase 10: Hardening, Security & Concurrency Verification Suite', () => {
   const redis = getRedisClient();
@@ -858,6 +863,122 @@ describe('Technician Portal Phase 10: Hardening, Security & Concurrency Verifica
         expect((item as any).fifoCost).toBeUndefined();
         expect((item as any).profitMargin).toBeUndefined();
         expect((item as any).margin).toBeUndefined();
+      }
+    });
+  });
+
+  // =========================================================================
+  // 10. NULL-RESILIENT JOB COMPLETION & HOLD PAYLOAD VALIDATION
+  // =========================================================================
+  describe('10. Null-Resilient Job Completion & Hold Payload Validation', () => {
+    it('accepts job complete payload containing null for optional fields without throwing Expected string, received null', () => {
+      const payloadWithNulls = {
+        workPerformed: 'Completed RO membrane replacement and testing',
+        diagnosis: null,
+        technicianNotes: null,
+        customerRemarks: null,
+        partsReplaced: [
+          {
+            itemId: null,
+            productId: null,
+            inventoryItemId: null,
+            sku: null,
+            itemName: 'Sediment Filter 5 Micron',
+            description: null,
+            quantity: 1,
+            unitPrice: 350,
+            price: null,
+            isWarrantyCovered: null,
+            inventoryDeducted: null,
+          },
+        ],
+        serviceCharge: null,
+        laborCharges: null,
+        gstEnabled: null,
+        gstRate: null,
+        payment: {
+          method: 'CASH',
+          amount: 350,
+          reference: null,
+          referenceNumber: null,
+          notes: null,
+        },
+        businessFields: null,
+        customerSignatureFileId: null,
+        customerSignatureBase64: null,
+      };
+
+      const result = TechnicianJobCompleteSchema.safeParse(payloadWithNulls);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.workPerformed).toBe('Completed RO membrane replacement and testing');
+        expect(result.data.diagnosis).toBeNull();
+        expect(result.data.gstEnabled).toBe(false);
+        expect(result.data.partsReplaced?.[0].isWarrantyCovered).toBe(false);
+        expect(result.data.partsReplaced?.[0].inventoryDeducted).toBe(false);
+      }
+    });
+
+    it('accepts job hold payload containing null for optional fields without error', () => {
+      const holdPayloadWithNulls = {
+        reason: null,
+        holdReason: null,
+        workPerformed: null,
+        diagnosis: null,
+        technicianNotes: null,
+        customerRemarks: null,
+        partsReplaced: [
+          {
+            itemId: null,
+            productId: null,
+            inventoryItemId: null,
+            sku: null,
+            itemName: 'Carbon Filter',
+            description: null,
+            quantity: 1,
+            unitPrice: null,
+            isWarrantyCovered: null,
+          },
+        ],
+        serviceCharge: null,
+        laborCharges: null,
+        gstEnabled: null,
+        gstRate: null,
+        businessFields: null,
+      };
+
+      const result = TechnicianJobHoldSchema.safeParse(holdPayloadWithNulls);
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts partial save payload containing null for optional fields without error', () => {
+      const execPayloadWithNulls = {
+        problemReported: null,
+        diagnosis: null,
+        workPerformed: null,
+        technicianNotes: null,
+        customerRemarks: null,
+        partsReplaced: null,
+        businessFields: null,
+        customerSignatureFileId: null,
+      };
+
+      const result = TechnicianJobExecutionSchema.safeParse(execPayloadWithNulls);
+      expect(result.success).toBe(true);
+    });
+
+    it('requires workPerformed for job completion with a clear descriptive message', () => {
+      const missingWork = {
+        workPerformed: '',
+        diagnosis: 'Need part',
+      };
+
+      const result = TechnicianJobCompleteSchema.safeParse(missingWork);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.errors[0]?.message).toBe(
+          'Work performed description is required before completing job'
+        );
       }
     });
   });

@@ -309,7 +309,7 @@ export class RestoreService {
       }
 
       // Cryptographic Checksum SHA-256 verification
-      if (preCheck.manifest.checksumSha256 && fullPath.endsWith('.sql.gz')) {
+      if (preCheck.manifest.checksumSha256 && (fullPath.endsWith('.sql.gz') || fullPath.endsWith('.srmbackup'))) {
         const fileBuf = await fs.promises.readFile(fullPath);
         const actualSha = this.validator.calculateSha256(fileBuf);
         if (actualSha.toLowerCase() !== preCheck.manifest.checksumSha256.toLowerCase()) {
@@ -325,7 +325,7 @@ export class RestoreService {
       this.updateHeartbeat();
       const restoredCounts: Record<string, number> = {};
 
-      const isSqlGz = fullPath.endsWith('.sql.gz');
+      const isSqlGz = fullPath.endsWith('.sql.gz') || fullPath.endsWith('.srmbackup');
 
       if (isSqlGz) {
         // Native PostgreSQL restore using psql
@@ -454,6 +454,14 @@ export class RestoreService {
       const countMismatches: string[] = [];
       for (const [tbl, expCount] of Object.entries(manifestCounts)) {
         const actualCount = restoredCounts[tbl] ?? 0;
+        // audit_logs may have additional rows written during pre-restore snapshot and restore execution
+        if (tbl === 'audit_logs') {
+          if (actualCount < expCount) {
+            countsMatch = false;
+            countMismatches.push(`${tbl}: expected at least ${expCount}, restored ${actualCount}`);
+          }
+          continue;
+        }
         if (actualCount !== expCount) {
           countsMatch = false;
           countMismatches.push(`${tbl}: expected ${expCount}, restored ${actualCount}`);

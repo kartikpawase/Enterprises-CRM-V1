@@ -7,6 +7,7 @@ import { technicianBillingService } from './technician-billing.service';
 import { technicianPaymentService } from './technician-payment.service';
 import { technicianNotificationService } from './technician-notification.service';
 import { technicianSummaryService } from './technician-summary.service';
+import { cashHandoversService } from '../payments/cash-handovers.service';
 import { authenticateTechnician } from './technician-portal.middleware';
 import { env } from '../../config/env';
 import {
@@ -305,6 +306,165 @@ export const technicianPortalRoutes: FastifyPluginAsync = async (fastify) => {
         error: {
           code: err.code || 'SUMMARY_ERROR',
           message: err.message || 'Unable to retrieve personal technician summary',
+        },
+      });
+    }
+  });
+
+  /**
+   * GET /api/v1/technician/my-cash
+   * Technician Cash Collection & Handover Status
+   * Strictly scoped to the authenticated technician session.
+   */
+  fastify.get('/my-cash', async (request: FastifyRequest, reply: FastifyReply) => {
+    const technicianId = request.technician?.technicianId;
+    if (!technicianId) {
+      return reply.status(HTTP_STATUS.UNAUTHORIZED).send({
+        success: false,
+        error: {
+          code: TECHNICIAN_ERROR_CODES.SESSION_EXPIRED,
+          message: 'Technician authentication required.',
+        },
+      });
+    }
+
+    try {
+      const companyId = (request.technician as any)?.companyId || null;
+      const data = await cashHandoversService.getTechnicianSummary(technicianId, companyId);
+      return reply.status(HTTP_STATUS.OK).send({
+        success: true,
+        data,
+      });
+    } catch (err: any) {
+      const statusCode = err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR;
+      return reply.status(statusCode).send({
+        success: false,
+        error: {
+          code: err.code || 'CASH_SUMMARY_ERROR',
+          message: err.message || 'Unable to retrieve cash collection summary',
+        },
+      });
+    }
+  });
+
+  /**
+   * GET /api/v1/technician/my-handovers
+   * Paginated list of cash collection records for the authenticated technician.
+   * Strictly scoped to technician's own collections.
+   */
+  fastify.get('/my-handovers', async (request: FastifyRequest, reply: FastifyReply) => {
+    const technicianId = request.technician?.technicianId;
+    if (!technicianId) {
+      return reply.status(HTTP_STATUS.UNAUTHORIZED).send({
+        success: false,
+        error: {
+          code: TECHNICIAN_ERROR_CODES.SESSION_EXPIRED,
+          message: 'Technician authentication required.',
+        },
+      });
+    }
+
+    try {
+      const companyId = (request.technician as any)?.companyId || null;
+      const query = request.query as any;
+      const result = await cashHandoversService.getHandovers(
+        {
+          technicianId,
+          status: query?.status || 'ALL',
+          page: query?.page ? Number(query.page) : 1,
+          limit: query?.limit ? Number(query.limit) : 50,
+          search: query?.search,
+          startDate: query?.startDate,
+          endDate: query?.endDate,
+        },
+        companyId,
+        {
+          id: technicianId,
+          technicianId,
+          role: 'Technician',
+        }
+      );
+      return reply.status(HTTP_STATUS.OK).send({
+        success: true,
+        data: result.data,
+        pagination: result.pagination,
+      });
+    } catch (err: any) {
+      const statusCode = err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR;
+      return reply.status(statusCode).send({
+        success: false,
+        error: {
+          code: err.code || 'CASH_HANDOVERS_ERROR',
+          message: err.message || 'Unable to retrieve cash handovers',
+        },
+      });
+    }
+  });
+
+  /**
+   * POST /api/v1/technician/submit-handover
+   * Submit cash handover request for the authenticated technician.
+   */
+  fastify.post('/submit-handover', async (request: FastifyRequest, reply: FastifyReply) => {
+    const technicianId = request.technician?.technicianId;
+    if (!technicianId) {
+      return reply.status(HTTP_STATUS.UNAUTHORIZED).send({
+        success: false,
+        error: {
+          code: TECHNICIAN_ERROR_CODES.SESSION_EXPIRED,
+          message: 'Technician authentication required.',
+        },
+      });
+    }
+
+    try {
+      const body = request.body as any;
+      const actor = {
+        id: technicianId,
+        technicianId,
+        fullName: request.technician?.fullName || 'Technician',
+        displayName: request.technician?.fullName || 'Technician',
+        role: 'Technician',
+      };
+
+      if (Array.isArray(body?.handoverIds) && body.handoverIds.length > 0) {
+        const batchResult = await cashHandoversService.submitBatchHandover(actor, {
+          handoverIds: body.handoverIds,
+          notes: body?.notes,
+        });
+        return reply.status(HTTP_STATUS.OK).send({
+          success: true,
+          data: batchResult,
+          message: batchResult.message,
+        });
+      }
+
+      const handoverId = body?.handoverId || body?.id;
+      if (!handoverId) {
+        return reply.status(HTTP_STATUS.BAD_REQUEST).send({
+          success: false,
+          error: {
+            code: 'INVALID_INPUT',
+            message: 'handoverId is required',
+          },
+        });
+      }
+
+      const singleResult = await cashHandoversService.submitHandover(handoverId, actor, {
+        notes: body?.notes,
+      });
+      return reply.status(HTTP_STATUS.OK).send({
+        success: true,
+        data: singleResult.data,
+        message: singleResult.message,
+      });
+    } catch (err: any) {
+      const statusCode = err.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR;
+      return reply.status(statusCode).send({
+        success: false,
+        error: {
+          code: err.code || 'HANDOVER_SUBMISSION_FAILED',
+          message: err.message || 'Failed to submit cash handover',
         },
       });
     }

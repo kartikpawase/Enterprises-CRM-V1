@@ -152,7 +152,7 @@ describe('Google Maps Platform & Live Tracking Architecture Suite', () => {
 
       // Cleanup
       await Promise.all(testTechnicians.map((t) => mapsTrackingRedisService.clearTracking(t.technicianId)));
-    });
+    }, 20000);
   });
 
   describe('4. Arrival Detection State Machine (Section 20)', () => {

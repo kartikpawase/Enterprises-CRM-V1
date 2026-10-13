@@ -16,6 +16,8 @@ import {
 import { invoicesRepository, memoryInvoices } from '../invoices/invoices.repository';
 import { memoryServices } from '../services/services.repository';
 import { memoryJobCards } from '../job-cards/job-cards.repository';
+import { memoryTechnicians } from '../technicians/technicians.repository';
+import { cashHandoversRepository } from '../payments/cash-handovers.repository';
 import type {
   Technician360ResponseData,
   TechnicianAssignedService,
@@ -331,22 +333,46 @@ export class TechnicianPortalRepository {
     technicianId: string,
     database = db
   ): Promise<Technician360ResponseData | null> {
-    const [tech] = await database
-      .select({
-        id: technicians.id,
-        fullName: technicians.fullName,
-        phone: technicians.phone,
-        email: technicians.email,
-        status: technicians.status,
-        skills: technicians.skills,
-        address: technicians.address,
-        emergencyContact: technicians.emergencyContact,
-        createdAt: technicians.createdAt,
-        updatedAt: technicians.updatedAt,
-      })
-      .from(technicians)
-      .where(eq(technicians.id, technicianId))
-      .limit(1);
+    let tech: any = null;
+    try {
+      const [dbTech] = await database
+        .select({
+          id: technicians.id,
+          fullName: technicians.fullName,
+          phone: technicians.phone,
+          email: technicians.email,
+          status: technicians.status,
+          skills: technicians.skills,
+          address: technicians.address,
+          emergencyContact: technicians.emergencyContact,
+          createdAt: technicians.createdAt,
+          updatedAt: technicians.updatedAt,
+        })
+        .from(technicians)
+        .where(eq(technicians.id, technicianId))
+        .limit(1);
+      tech = dbTech;
+    } catch {
+      // ignore
+    }
+
+    if (!tech) {
+      const memoryTech = memoryTechnicians.find((t) => t.id === technicianId);
+      if (memoryTech) {
+        tech = {
+          id: memoryTech.id,
+          fullName: memoryTech.fullName,
+          phone: memoryTech.phone,
+          email: memoryTech.email,
+          status: memoryTech.status || 'ACTIVE',
+          skills: memoryTech.skills || [],
+          address: memoryTech.address || null,
+          emergencyContact: memoryTech.emergencyContact || null,
+          createdAt: memoryTech.createdAt ? new Date(memoryTech.createdAt) : new Date(),
+          updatedAt: memoryTech.updatedAt ? new Date(memoryTech.updatedAt) : new Date(),
+        };
+      }
+    }
 
     if (!tech) {
       return null;
@@ -370,6 +396,85 @@ export class TechnicianPortalRepository {
       availability = 'OFF_DUTY';
     } else if (summary.workloadBreakdown.inProgress > 0) {
       availability = 'BUSY';
+    }
+
+    // Query active job cards with recorded spare parts for this technician (ON_HOLD / IN_PROGRESS / SCHEDULED)
+    let activeJobSpares: any[] = [];
+    try {
+      const activeJobCards = await database
+        .select({
+          id: jobCards.id,
+          jobCardNumber: jobCards.jobCardNumber,
+          serviceId: jobCards.serviceId,
+          serviceNumber: services.serviceNumber,
+          customerName: customers.fullName,
+          status: jobCards.status,
+          partsReplaced: jobCards.partsReplaced,
+          updatedAt: jobCards.updatedAt,
+        })
+        .from(jobCards)
+        .leftJoin(services, eq(services.id, jobCards.serviceId))
+        .leftJoin(customers, eq(customers.id, jobCards.customerId))
+        .where(
+          and(
+            eq(jobCards.technicianId, technicianId),
+            sql`${jobCards.status} NOT IN ('COMPLETED', 'CANCELLED', 'CLOSED')`,
+            sql`${jobCards.partsReplaced} IS NOT NULL`
+          )
+        );
+
+      activeJobSpares = (activeJobCards || [])
+        .map((jc) => {
+          const rawParts = Array.isArray(jc.partsReplaced) ? jc.partsReplaced : [];
+          const parts = rawParts.map((p: any) => ({
+            itemName: p.itemName || p.partName || p.name || 'Spare Part',
+            sku: p.sku || p.partSku || null,
+            quantity: Number(p.quantity) || 1,
+            unitPrice: Number(p.unitPrice ?? p.price ?? 0),
+            source: (p.productId || p.inventoryItemId) ? ('Inventory' as const) : ('Manual' as const),
+            isWarrantyCovered: Boolean(p.isWarrantyCovered),
+          }));
+          return {
+            jobCardId: jc.id,
+            jobCardNumber: jc.jobCardNumber,
+            serviceId: jc.serviceId,
+            serviceNumber: jc.serviceNumber || 'SRV-ACTIVE',
+            customerName: jc.customerName || 'Customer',
+            status: jc.status,
+            parts,
+            updatedAt: jc.updatedAt ? new Date(jc.updatedAt).toISOString() : new Date().toISOString(),
+          };
+        })
+        .filter((jc) => jc.parts.length > 0);
+    } catch {
+      // In-memory fallback if database query fails or in isolated tests
+      const memJobs = memoryJobCards.filter(
+        (j) =>
+          j.technicianId === technicianId &&
+          !['COMPLETED', 'CANCELLED', 'CLOSED'].includes(j.status) &&
+          Array.isArray(j.partsReplaced) &&
+          j.partsReplaced.length > 0
+      );
+      activeJobSpares = memJobs.map((j) => {
+        const memSrv = memoryServices.find((s) => s.id === j.serviceId);
+        return {
+          jobCardId: j.id,
+          jobCardNumber: j.jobCardNumber,
+          serviceId: j.serviceId,
+          serviceNumber: memSrv?.serviceNumber || 'SRV-ACTIVE',
+          customerName: 'Customer',
+          status: j.status,
+          parts: (j.partsReplaced as any[]).map((p: any) => ({
+            itemName: p.itemName || p.partName || 'Spare Part',
+            sku: p.sku || null,
+            quantity: Number(p.quantity) || 1,
+            unitPrice: Number(p.unitPrice ?? p.price ?? 0),
+            source: (p.productId || p.inventoryItemId) ? ('Inventory' as const) : ('Manual' as const),
+            isWarrantyCovered: Boolean(p.isWarrantyCovered),
+          })),
+          updatedAt: new Date().toISOString(),
+        };
+      });
     }
 
     return {
@@ -404,6 +509,8 @@ export class TechnicianPortalRepository {
         averageCompletionTimeFormatted: summary.averageCompletionTimeFormatted,
         isAverageCompletionTimeReliable: summary.isAverageCompletionTimeReliable,
       },
+      activeJobSpares,
+      cashSummary: await cashHandoversRepository.getTechnicianSummary(technicianId, undefined, database),
     };
   }
 
@@ -735,6 +842,9 @@ export class TechnicianPortalRepository {
             workPerformed: jobCards.workPerformed,
             partsReplaced: jobCards.partsReplaced,
             technicianNotes: jobCards.technicianNotes,
+            laborCharges: jobCards.laborCharges,
+            partsCharges: jobCards.partsCharges,
+            totalCharges: jobCards.totalCharges,
           })
           .from(jobCards)
           .where(eq(jobCards.serviceId, serviceRow.id))
@@ -837,7 +947,13 @@ export class TechnicianPortalRepository {
         serviceType: serviceRow.serviceType,
         serviceClassification: serviceRow.serviceClassification,
         priority: serviceRow.priority,
-        status: jc?.status === 'ON_HOLD' ? 'ON_HOLD' : (jc?.status === 'IN_PROGRESS' || jc?.status === 'STARTED' ? 'IN_PROGRESS' : serviceRow.status),
+        status: (serviceRow.status === 'COMPLETED' || ['COMPLETED', 'CUSTOMER_CONFIRMED', 'CLOSED'].includes(jc?.status))
+          ? 'COMPLETED'
+          : (jc?.status === 'ON_HOLD'
+              ? 'ON_HOLD'
+              : (jc?.status === 'IN_PROGRESS' || jc?.status === 'STARTED'
+                  ? 'IN_PROGRESS'
+                  : serviceRow.status)),
         scheduledDate: serviceRow.scheduledDate,
         scheduledTimeSlot: serviceRow.scheduledTimeSlot,
         customerNotes: serviceRow.customerNotes,
@@ -849,6 +965,11 @@ export class TechnicianPortalRepository {
         problemReported: jc?.problemReported || null,
         diagnosis: jc?.diagnosis || null,
         workPerformed: jc?.workPerformed || null,
+        partsReplaced: jc?.partsReplaced || [],
+        technicianNotes: jc?.technicianNotes || null,
+        laborCharges: jc?.laborCharges || null,
+        partsCharges: jc?.partsCharges || null,
+        totalCharges: jc?.totalCharges || null,
         customer: {
           id: cust?.id || serviceRow.customerId,
           customerNumber: cust?.customerNumber || null,

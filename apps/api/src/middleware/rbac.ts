@@ -20,6 +20,7 @@ const DEFAULT_PERMISSIONS_BY_ROLE: Record<string, string[]> = {
     'products.view', 'products.create', 'products.update',
     'services.view', 'services.create', 'services.update', 'services.complete',
     'payments.view', 'payments.create', 'payments.refund',
+    'expenses.view', 'expenses.create', 'expenses.edit', 'expenses.delete',
     'tasks.view', 'tasks.create', 'tasks.update',
     'inquiries.view', 'inquiries.create', 'inquiries.edit', 'inquiries.assign',
     'whatsapp.view', 'whatsapp.send', 'whatsapp.manage',
@@ -45,6 +46,7 @@ const DEFAULT_PERMISSIONS_BY_ROLE: Record<string, string[]> = {
     'products.view', 'products.create', 'products.update',
     'services.view', 'services.create', 'services.update', 'services.complete',
     'payments.view', 'payments.create', 'payments.refund',
+    'expenses.view', 'expenses.create', 'expenses.edit', 'expenses.delete',
     'tasks.view', 'tasks.create', 'tasks.update',
     'inquiries.view', 'inquiries.create', 'inquiries.edit', 'inquiries.assign',
     'whatsapp.view', 'whatsapp.send', 'whatsapp.manage',
@@ -88,27 +90,52 @@ const DEFAULT_PERMISSIONS_BY_ROLE: Record<string, string[]> = {
 };
 
 /**
+ * Normalize role name for consistent comparison and permission lookup
+ */
+export function normalizeRoleName(role?: string): string {
+  if (!role) return 'Staff';
+  const r = role.toLowerCase().replace(/[-_]/g, ' ').trim();
+  if (r === 'super admin' || r === 'super_admin' || r === 'superadmin') return 'Super Admin';
+  if (r === 'admin') return 'Admin';
+  if (r === 'staff') return 'Staff';
+  if (r === 'technician') return 'Technician';
+  return role;
+}
+
+/**
  * Retrieve the active set of permission keys for a given role
  */
 export async function getRolePermissionKeys(roleName: UserRole): Promise<Set<string>> {
+  const normalizedRole = normalizeRoleName(roleName) as UserRole;
   const now = Date.now();
-  const cached = permissionCache.get(roleName);
+  const cached = permissionCache.get(roleName) || permissionCache.get(normalizedRole);
   if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
     return cached.keys;
   }
 
   // Query role permissions from database
   try {
-    const roleRecord = await db.query.roles.findFirst({
-      where: eq(roles.name, roleName),
-      with: {
-        rolePermissions: {
-          with: {
-            permission: true,
+    const roleRecord =
+      (await db.query.roles.findFirst({
+        where: eq(roles.name, roleName),
+        with: {
+          rolePermissions: {
+            with: {
+              permission: true,
+            },
           },
         },
-      },
-    });
+      })) ||
+      (await db.query.roles.findFirst({
+        where: eq(roles.name, normalizedRole),
+        with: {
+          rolePermissions: {
+            with: {
+              permission: true,
+            },
+          },
+        },
+      }));
 
     const keys = new Set<string>();
     if (roleRecord?.rolePermissions) {
@@ -119,17 +146,25 @@ export async function getRolePermissionKeys(roleName: UserRole): Promise<Set<str
       }
     }
 
-    if (keys.size === 0 && DEFAULT_PERMISSIONS_BY_ROLE[roleName]) {
-      for (const p of DEFAULT_PERMISSIONS_BY_ROLE[roleName]) {
+    // Always merge default permissions so newly registered system modules
+    // (such as expenses.*) are immediately authorized even if the role had older DB permissions
+    const defaults =
+      DEFAULT_PERMISSIONS_BY_ROLE[roleName] || DEFAULT_PERMISSIONS_BY_ROLE[normalizedRole];
+    if (defaults) {
+      for (const p of defaults) {
         keys.add(p);
       }
     }
 
     permissionCache.set(roleName, { keys, cachedAt: now });
+    permissionCache.set(normalizedRole, { keys, cachedAt: now });
     return keys;
   } catch (error) {
-    const fallbackKeys = new Set<string>(DEFAULT_PERMISSIONS_BY_ROLE[roleName] || []);
+    const fallbackKeys = new Set<string>(
+      DEFAULT_PERMISSIONS_BY_ROLE[roleName] || DEFAULT_PERMISSIONS_BY_ROLE[normalizedRole] || []
+    );
     permissionCache.set(roleName, { keys: fallbackKeys, cachedAt: now });
+    permissionCache.set(normalizedRole, { keys: fallbackKeys, cachedAt: now });
     return fallbackKeys;
   }
 }
@@ -140,6 +175,7 @@ export async function getRolePermissionKeys(roleName: UserRole): Promise<Set<str
 export function invalidateRolePermissionCache(roleName?: UserRole): void {
   if (roleName) {
     permissionCache.delete(roleName);
+    permissionCache.delete(normalizeRoleName(roleName) as UserRole);
   } else {
     permissionCache.clear();
   }
@@ -156,7 +192,12 @@ export function requireRole(...allowedRoles: UserRole[]) {
       if (!request.user) return;
     }
 
-    if (!allowedRoles.includes(request.user.role)) {
+    const userRole = normalizeRoleName(request.user.role) as UserRole;
+    const isAllowed = allowedRoles.some(
+      (r) => r === request.user?.role || normalizeRoleName(r) === userRole
+    );
+
+    if (!isAllowed) {
       return reply.status(HTTP_STATUS.FORBIDDEN).send({
         success: false,
         error: {
@@ -180,7 +221,8 @@ export function requirePermission(...requiredPermissions: (PermissionKey | strin
     }
 
     // Super Admin has unrestricted access to all permissions
-    if (request.user.role === 'Super Admin') {
+    const userRole = normalizeRoleName(request.user.role) as UserRole;
+    if (userRole === 'Super Admin' || request.user.role === 'Super Admin') {
       return;
     }
 
@@ -213,7 +255,8 @@ export function requireAnyPermission(...requiredPermissions: (PermissionKey | st
     }
 
     // Super Admin has unrestricted access to all permissions
-    if (request.user.role === 'Super Admin') {
+    const userRole = normalizeRoleName(request.user.role) as UserRole;
+    if (userRole === 'Super Admin' || request.user.role === 'Super Admin') {
       return;
     }
 

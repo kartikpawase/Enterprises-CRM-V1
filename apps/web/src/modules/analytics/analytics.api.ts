@@ -14,12 +14,14 @@ import type {
   TechnicianAnalytics,
   WarrantyAnalytics,
   InquiryAnalytics,
+  FinancialSummaryReport,
 } from '@crm/types';
 
 // Query Keys
 export const analyticsKeys = {
   all: ['analytics'] as const,
   overview: (filter: AnalyticsDateFilter) => [...analyticsKeys.all, 'overview', filter] as const,
+  financialSummary: (filter: AnalyticsDateFilter) => [...analyticsKeys.all, 'financialSummary', filter] as const,
   sales: (filter: AnalyticsDateFilter) => [...analyticsKeys.all, 'sales', filter] as const,
   revenue: (filter: AnalyticsDateFilter) => [...analyticsKeys.all, 'revenue', filter] as const,
   payments: (filter: AnalyticsDateFilter) => [...analyticsKeys.all, 'payments', filter] as const,
@@ -392,6 +394,24 @@ export function useInventoryAnalytics() {
       return response.data;
     },
     staleTime: 60 * 1000,
+  });
+}
+
+export function useFinancialSummaryQuery(filter: AnalyticsDateFilter) {
+  return useQuery<FinancialSummaryReport>({
+    queryKey: analyticsKeys.financialSummary(filter),
+    queryFn: async () => {
+      const response = await apiClient.get<any>('/analytics/financial-summary', {
+        params: {
+          range: filter.range,
+          startDate: filter.startDate,
+          endDate: filter.endDate,
+          timezone: filter.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
+      });
+      return (response as any).data || response;
+    },
+    staleTime: 30 * 1000,
   });
 }
 

@@ -976,6 +976,172 @@ export async function ensureCustomerAddressCoordinates(targetPg: PGlite | postgr
   }
 }
 
+/**
+ * Ensures cash_handovers table and indexes exist
+ */
+export async function ensureCashHandoverTables(targetPg: PGlite | postgres.Sql): Promise<void> {
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS "cash_handovers" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      "payment_id" uuid NOT NULL UNIQUE REFERENCES "payments"("id") ON DELETE RESTRICT,
+      "service_id" uuid REFERENCES "services"("id") ON DELETE SET NULL,
+      "job_card_id" uuid REFERENCES "job_cards"("id") ON DELETE SET NULL,
+      "technician_id" uuid NOT NULL REFERENCES "technicians"("id") ON DELETE RESTRICT,
+      "amount" numeric(12, 2) NOT NULL,
+      "status" text NOT NULL DEFAULT 'PENDING',
+      "collected_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "handed_over_at" timestamp with time zone,
+      "received_by" uuid REFERENCES "users"("id") ON DELETE SET NULL,
+      "notes" text,
+      "company_id" text,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    );`,
+    `CREATE INDEX IF NOT EXISTS "cash_handovers_payment_id_idx" ON "cash_handovers" ("payment_id");`,
+    `CREATE INDEX IF NOT EXISTS "cash_handovers_technician_id_idx" ON "cash_handovers" ("technician_id");`,
+    `CREATE INDEX IF NOT EXISTS "cash_handovers_status_idx" ON "cash_handovers" ("status");`,
+    `CREATE INDEX IF NOT EXISTS "cash_handovers_service_id_idx" ON "cash_handovers" ("service_id");`,
+  ];
+
+  if ('exec' in targetPg) {
+    for (const stmt of statements) {
+      try {
+        await targetPg.exec(stmt);
+      } catch {}
+    }
+  } else {
+    for (const stmt of statements) {
+      try {
+        await targetPg.unsafe(stmt);
+      } catch {}
+    }
+  }
+}
+
+/**
+ * Ensures expenses and recurring expense schedules tables and indexes exist
+ */
+export async function ensureExpensesTables(targetPg: PGlite | postgres.Sql): Promise<void> {
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS "expense_schedules" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      "company_id" text,
+      "title" text NOT NULL,
+      "category" text NOT NULL,
+      "amount" numeric(12, 2) NOT NULL,
+      "frequency" text NOT NULL,
+      "payment_method" text NOT NULL,
+      "start_date" timestamp with time zone NOT NULL,
+      "end_date" timestamp with time zone,
+      "next_due_date" timestamp with time zone NOT NULL,
+      "is_active" boolean NOT NULL DEFAULT true,
+      "notes" text,
+      "created_by" uuid NOT NULL REFERENCES "users"("id") ON DELETE RESTRICT,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    );`,
+    `CREATE INDEX IF NOT EXISTS "expense_schedules_company_id_idx" ON "expense_schedules" ("company_id");`,
+    `CREATE INDEX IF NOT EXISTS "expense_schedules_is_active_idx" ON "expense_schedules" ("is_active");`,
+    `CREATE INDEX IF NOT EXISTS "expense_schedules_next_due_date_idx" ON "expense_schedules" ("next_due_date");`,
+
+    `CREATE TABLE IF NOT EXISTS "expenses" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      "company_id" text,
+      "title" text NOT NULL,
+      "category" text NOT NULL,
+      "amount" numeric(12, 2) NOT NULL,
+      "expense_date" timestamp with time zone NOT NULL,
+      "payment_method" text NOT NULL,
+      "notes" text,
+      "status" text NOT NULL DEFAULT 'RECORDED',
+      "recorded_by" uuid NOT NULL REFERENCES "users"("id") ON DELETE RESTRICT,
+      "voided_by" uuid REFERENCES "users"("id") ON DELETE SET NULL,
+      "voided_at" timestamp with time zone,
+      "void_reason" text,
+      "recurring_schedule_id" uuid REFERENCES "expense_schedules"("id") ON DELETE SET NULL,
+      "occurrence_period" text,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    );`,
+    `CREATE INDEX IF NOT EXISTS "expenses_company_id_idx" ON "expenses" ("company_id");`,
+    `CREATE INDEX IF NOT EXISTS "expenses_expense_date_idx" ON "expenses" ("expense_date");`,
+    `CREATE INDEX IF NOT EXISTS "expenses_category_idx" ON "expenses" ("category");`,
+    `CREATE INDEX IF NOT EXISTS "expenses_payment_method_idx" ON "expenses" ("payment_method");`,
+    `CREATE INDEX IF NOT EXISTS "expenses_status_idx" ON "expenses" ("status");`,
+    `CREATE INDEX IF NOT EXISTS "expenses_schedule_idx" ON "expenses" ("recurring_schedule_id");`,
+    `CREATE INDEX IF NOT EXISTS "expenses_occurrence_period_idx" ON "expenses" ("occurrence_period");`,
+
+    `CREATE TABLE IF NOT EXISTS "monthly_closings" (
+      "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      "company_id" text,
+      "year" integer NOT NULL,
+      "month" integer NOT NULL,
+      "lead_profit" numeric(12, 2) DEFAULT '0.00' NOT NULL,
+      "total_expenses" numeric(12, 2) DEFAULT '0.00' NOT NULL,
+      "monthly_profit" numeric(12, 2) DEFAULT '0.00' NOT NULL,
+      "previous_closing_cash" numeric(12, 2) DEFAULT '0.00' NOT NULL,
+      "expected_cash_before_savings" numeric(12, 2) DEFAULT '0.00' NOT NULL,
+      "actual_bank_balance" numeric(12, 2) DEFAULT '0.00' NOT NULL,
+      "reconciliation_difference" numeric(12, 2) DEFAULT '0.00' NOT NULL,
+      "savings_transfer" numeric(12, 2) DEFAULT '0.00' NOT NULL,
+      "closing_cash" numeric(12, 2) DEFAULT '0.00' NOT NULL,
+      "previous_savings_balance" numeric(12, 2) DEFAULT '0.00' NOT NULL,
+      "current_savings_balance" numeric(12, 2) DEFAULT '0.00' NOT NULL,
+      "status" text DEFAULT 'DRAFT' NOT NULL,
+      "approved_by" uuid REFERENCES "users"("id") ON DELETE SET NULL,
+      "approved_at" timestamp with time zone,
+      "notes" text,
+      "category_breakdown" jsonb,
+      "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+      "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    );`,
+    `CREATE INDEX IF NOT EXISTS "monthly_closings_company_year_month_idx" ON "monthly_closings" ("company_id", "year", "month");`,
+    `DO $$
+     BEGIN
+       IF EXISTS (
+         SELECT 1 FROM pg_index i
+         JOIN pg_class c ON c.oid = i.indexrelid
+         WHERE c.relname = 'monthly_closings_company_year_month_unique'
+           AND i.indnullsnotdistinct = false
+       ) THEN
+         DROP INDEX IF EXISTS "monthly_closings_company_year_month_unique";
+       END IF;
+     END $$;`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "monthly_closings_company_year_month_unique" ON "monthly_closings" ("company_id", "year", "month") NULLS NOT DISTINCT;`,
+    `CREATE INDEX IF NOT EXISTS "monthly_closings_status_idx" ON "monthly_closings" ("status");`,
+
+    `INSERT INTO "permissions" ("key", "name", "description", "module")
+     VALUES
+       ('expenses.view', 'View Expenses', 'View operational expenses and financial reports', 'expenses'),
+       ('expenses.create', 'Create Expense', 'Record new expenses and recurring commitments', 'expenses'),
+       ('expenses.edit', 'Edit Expense', 'Modify recorded expenses', 'expenses'),
+       ('expenses.delete', 'Delete Expense', 'Void or delete expense records', 'expenses'),
+       ('expenses.approve', 'Approve Monthly Closings', 'Approve monthly financial close and carry-forward balances', 'expenses')
+     ON CONFLICT ("key") DO NOTHING;`,
+    `INSERT INTO "role_permissions" ("role_id", "permission_id")
+     SELECT r.id, p.id
+     FROM "roles" r
+     CROSS JOIN "permissions" p
+     WHERE r.name IN ('Super Admin', 'Admin')
+       AND p.key IN ('expenses.view', 'expenses.create', 'expenses.edit', 'expenses.delete', 'expenses.approve')
+     ON CONFLICT DO NOTHING;`,
+  ];
+
+  if ('exec' in targetPg) {
+    for (const stmt of statements) {
+      try {
+        await targetPg.exec(stmt);
+      } catch {}
+    }
+  } else {
+    for (const stmt of statements) {
+      try {
+        await targetPg.unsafe(stmt);
+      } catch {}
+    }
+  }
+}
+
 
 /**
  * Ensures migrations and initial database initialization is executed once on server startup
@@ -1038,6 +1204,8 @@ export async function ensureDatabaseInitialized(): Promise<void> {
         await ensureChatbotTables(pgClient);
         await ensureTechnicianPortalTables(pgClient);
         await ensureCustomerAddressCoordinates(pgClient);
+        await ensureCashHandoverTables(pgClient);
+        await ensureExpensesTables(pgClient);
       } else if (pgliteClient) {
         try {
           await pgliteClient.waitReady;
@@ -1072,6 +1240,8 @@ export async function ensureDatabaseInitialized(): Promise<void> {
         await ensureChatbotTables(pgliteClient);
         await ensureTechnicianPortalTables(pgliteClient);
         await ensureCustomerAddressCoordinates(pgliteClient);
+        await ensureCashHandoverTables(pgliteClient);
+        await ensureExpensesTables(pgliteClient);
       }
 
       isInitialized = true;

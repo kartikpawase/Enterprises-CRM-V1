@@ -296,9 +296,19 @@ export class CustomerImporter extends BaseImporter {
         });
       }
 
-      // Check duplicates for email (duplicate mobile numbers are permitted)
+      // Check duplicates for phone and email
       let isDuplicate = false;
-      if (fields.email && (existingEmails.has(fields.email) || seenEmailsInFile.has(fields.email))) {
+      if (fields.phone && (existingPhones.has(fields.phone) || seenPhonesInFile.has(fields.phone))) {
+        isDuplicate = true;
+        duplicateRows++;
+        rowErrors.push({
+          rowNumber,
+          field: 'phone',
+          code: 'DUPLICATE',
+          message: `Row ${rowNumber}: Customer with phone '${fields.phone}' already exists.`,
+          value: fields.phone,
+        });
+      } else if (fields.email && (existingEmails.has(fields.email) || seenEmailsInFile.has(fields.email))) {
         isDuplicate = true;
         duplicateRows++;
         rowErrors.push({
@@ -310,6 +320,7 @@ export class CustomerImporter extends BaseImporter {
         });
       }
 
+      if (fields.phone) seenPhonesInFile.add(fields.phone);
       if (fields.email) seenEmailsInFile.add(fields.email);
 
       const normalized = {

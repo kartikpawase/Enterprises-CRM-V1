@@ -38,6 +38,7 @@ import {
   CheckCheck,
   ArrowUpRight,
   Navigation,
+  Info,
 } from 'lucide-react';
 import { TECHNICIAN_COMPLETED_ROUTE } from '@crm/shared';
 import { useTechnicianTracking } from '../hooks/useTechnicianTracking';
@@ -68,6 +69,7 @@ interface PartReplacedEntry {
   unitPrice?: number;
   lineTotal?: number;
   isWarrantyCovered?: boolean;
+  inventoryDeducted?: boolean;
 }
 
 export const TechnicianServiceDetailPage: React.FC = () => {
@@ -85,12 +87,12 @@ export const TechnicianServiceDetailPage: React.FC = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
-  // Hold dialog state
-  const [isHoldModalOpen, setIsHoldModalOpen] = useState<boolean>(false);
+  // Hold state
   const [holdReason, setHoldReason] = useState<string>('');
 
-  // Execution modal state
+  // Execution modal state & mode ('complete' | 'hold')
   const [isExecutionModalOpen, setIsExecutionModalOpen] = useState<boolean>(false);
+  const [executionMode, setExecutionMode] = useState<'complete' | 'hold'>('complete');
   const [diagnosis, setDiagnosis] = useState<string>('');
   const [workPerformed, setWorkPerformed] = useState<string>('');
   const [technicianNotes, setTechnicianNotes] = useState<string>('');
@@ -109,6 +111,11 @@ export const TechnicianServiceDetailPage: React.FC = () => {
   const [selectedPartName, setSelectedPartName] = useState<string>('');
   const [selectedPartQty, setSelectedPartQty] = useState<number>(1);
   const [selectedPartWarranty, setSelectedPartWarranty] = useState<boolean>(false);
+  // Manual spare parts entry state
+  const [sparePartEntryMode, setSparePartEntryMode] = useState<'manual' | 'catalog'>('manual');
+  const [manualPartName, setManualPartName] = useState<string>('');
+  const [manualPartQty, setManualPartQty] = useState<number>(1);
+  const [manualPartPrice, setManualPartPrice] = useState<string>('');
   const [serviceCharge, setServiceCharge] = useState<string>('');
   const [gstEnabled, setGstEnabled] = useState<boolean>(false);
   const [gstRate, setGstRate] = useState<number>(18);
@@ -147,8 +154,28 @@ export const TechnicianServiceDetailPage: React.FC = () => {
       if (response && response.data) {
         setService(response.data);
         setBilling(response.data.billing || null);
-        if (response.data.diagnosis) setDiagnosis(response.data.diagnosis);
-        if (response.data.workPerformed) setWorkPerformed(response.data.workPerformed);
+        if (response.data.diagnosis) setDiagnosis(String(response.data.diagnosis));
+        if (response.data.workPerformed) setWorkPerformed(String(response.data.workPerformed));
+        if (response.data.technicianNotes) setTechnicianNotes(String(response.data.technicianNotes));
+        if (response.data.laborCharges !== undefined && response.data.laborCharges !== null) {
+          setServiceCharge(String(response.data.laborCharges));
+        }
+        if (Array.isArray(response.data.partsReplaced) && response.data.partsReplaced.length > 0) {
+          setPartsReplaced(
+            response.data.partsReplaced.map((p: any) => ({
+              productId: (p.productId && String(p.productId).trim()) || (p.inventoryItemId && String(p.inventoryItemId).trim()) || (p.itemId && String(p.itemId).trim()) || undefined,
+              inventoryItemId: (p.inventoryItemId && String(p.inventoryItemId).trim()) || (p.productId && String(p.productId).trim()) || (p.itemId && String(p.itemId).trim()) || undefined,
+              itemId: (p.itemId && String(p.itemId).trim()) || (p.productId && String(p.productId).trim()) || undefined,
+              itemName: p.itemName || p.partName || 'Spare Part',
+              description: p.description || '',
+              sku: p.sku || '',
+              quantity: Number(p.quantity) || 1,
+              unitPrice: Number(p.unitPrice ?? p.price ?? 0),
+              isWarrantyCovered: Boolean(p.isWarrantyCovered),
+              inventoryDeducted: Boolean(p.inventoryDeducted),
+            }))
+          );
+        }
       }
     } catch (err: any) {
       const isForbidden =
@@ -202,30 +229,80 @@ export const TechnicianServiceDetailPage: React.FC = () => {
     }
   };
 
-  // 2. Put On Hold
-  const handleHoldJob = async () => {
+  // Helper: Sanitize parts payload to ensure clean strings/numbers and prevent null values
+  const sanitizePartsPayload = (parts: PartReplacedEntry[]) => {
+    return (parts || [])
+      .filter((p) => p && p.itemName && p.itemName.trim())
+      .map((p) => {
+        const invId =
+          (p.inventoryItemId && String(p.inventoryItemId).trim()) ||
+          (p.itemId && String(p.itemId).trim()) ||
+          undefined;
+        const prodId = (p.productId && String(p.productId).trim()) || invId;
+        const itemId = (p.itemId && String(p.itemId).trim()) || prodId;
+        const desc = (p.description && String(p.description).trim()) || undefined;
+        const sku = (p.sku && String(p.sku).trim()) || undefined;
+        return {
+          itemId,
+          productId: prodId,
+          inventoryItemId: invId,
+          sku,
+          itemName: p.itemName.trim(),
+          description: desc,
+          quantity: Math.max(1, Number(p.quantity) || 1),
+          unitPrice: Math.max(0, Number(p.unitPrice ?? (p as any).price ?? 0)),
+          isWarrantyCovered: Boolean(p.isWarrantyCovered),
+          inventoryDeducted: Boolean(p.inventoryDeducted),
+        };
+      });
+  };
+
+  // 2. Put On Hold with Execution Progress & Consumed Spare Parts
+  const handleSaveAndHoldJob = async () => {
+    if (actionLoading === 'hold') return;
     const targetId = getJobCardTargetId();
     if (!targetId) return;
+
+    const finalReason = holdReason.trim() || 'Work paused / on hold';
 
     setActionLoading('hold');
     setActionError(null);
     setActionSuccess(null);
 
+    const effectiveParts = commitPendingDraftSpare();
+    const sanitizedParts = sanitizePartsPayload(effectiveParts);
+
     try {
       await apiClient.post(`/technician/job-cards/${targetId}/hold`, {
-        reason: holdReason.trim(),
+        reason: finalReason,
+        holdReason: finalReason,
+        diagnosis: (diagnosis && diagnosis.trim()) || undefined,
+        workPerformed: (workPerformed && workPerformed.trim()) || undefined,
+        technicianNotes: (technicianNotes && technicianNotes.trim()) || undefined,
+        customerRemarks: (customerRemarks && customerRemarks.trim()) || undefined,
+        partsReplaced: sanitizedParts,
+        serviceCharge: parsedLabor > 0 ? parsedLabor : undefined,
+        gstEnabled: Boolean(gstEnabled),
+        gstRate: gstEnabled ? effectiveGstRate : undefined,
+        businessFields: businessFields && Object.keys(businessFields).length > 0 ? businessFields : undefined,
       });
-      setIsHoldModalOpen(false);
-      setHoldReason('');
-      setActionSuccess('Job put on hold.');
+
+      setIsExecutionModalOpen(false);
+      setActionSuccess('Job saved and placed on hold.');
       setService((prev) => (prev ? { ...prev, status: 'ON_HOLD', jobCardStatus: 'ON_HOLD' } : prev));
+
+      queryClient.invalidateQueries({ queryKey: ['services'] });
+      queryClient.invalidateQueries({ queryKey: ['job-cards'] });
+
       await fetchServiceDetail();
     } catch (err: any) {
-      setActionError(err?.message || 'Unable to put job on hold.');
+      setActionError(err?.message || 'Unable to save progress and put job on hold.');
     } finally {
       setActionLoading(null);
     }
   };
+
+  const handleHoldJob = handleSaveAndHoldJob;
 
   // 3. Resume Job
   const handleResumeJob = async () => {
@@ -257,14 +334,17 @@ export const TechnicianServiceDetailPage: React.FC = () => {
     setActionError(null);
     setActionSuccess(null);
 
+    const effectiveParts = commitPendingDraftSpare();
+    const sanitizedParts = sanitizePartsPayload(effectiveParts);
+
     try {
       await apiClient.patch(`/technician/job-cards/${targetId}`, {
-        diagnosis: diagnosis.trim() || undefined,
-        workPerformed: workPerformed.trim() || undefined,
-        technicianNotes: technicianNotes.trim() || undefined,
-        customerRemarks: customerRemarks.trim() || undefined,
-        partsReplaced,
-        businessFields,
+        diagnosis: (diagnosis && diagnosis.trim()) || undefined,
+        workPerformed: (workPerformed && workPerformed.trim()) || undefined,
+        technicianNotes: (technicianNotes && technicianNotes.trim()) || undefined,
+        customerRemarks: (customerRemarks && customerRemarks.trim()) || undefined,
+        partsReplaced: sanitizedParts,
+        businessFields: businessFields && Object.keys(businessFields).length > 0 ? businessFields : undefined,
       });
       setActionSuccess('Execution details saved successfully.');
       await fetchServiceDetail();
@@ -278,7 +358,7 @@ export const TechnicianServiceDetailPage: React.FC = () => {
   // Bill Calculations
   const partsSubtotal = partsReplaced.reduce((sum, p) => {
     if (p.isWarrantyCovered) return sum;
-    const price = Math.max(0, Number(p.unitPrice || 0));
+    const price = Math.max(0, Number(p.unitPrice ?? (p as any).price ?? 0));
     return sum + price * Math.max(1, Number(p.quantity) || 1);
   }, 0);
   const parsedLabor = Math.max(0, parseFloat(serviceCharge) || 0);
@@ -304,7 +384,7 @@ export const TechnicianServiceDetailPage: React.FC = () => {
     const targetId = getJobCardTargetId();
     if (!targetId) return;
 
-    if (!workPerformed.trim()) {
+    if (!workPerformed || !workPerformed.trim()) {
       setActionError('Work performed description is required to complete this job.');
       return;
     }
@@ -313,35 +393,36 @@ export const TechnicianServiceDetailPage: React.FC = () => {
     setActionError(null);
     setActionSuccess(null);
 
+    const effectiveParts = commitPendingDraftSpare();
+    const sanitizedParts = sanitizePartsPayload(effectiveParts);
+
     try {
       const response = await apiClient.post<any>(`/technician/job-cards/${targetId}/complete`, {
         workPerformed: workPerformed.trim(),
-        diagnosis: diagnosis.trim() || undefined,
-        technicianNotes: technicianNotes.trim() || undefined,
-        customerRemarks: customerRemarks.trim() || undefined,
-        partsReplaced: partsReplaced
-          .filter((p) => p.itemName && p.itemName.trim())
-          .map((p) => ({
-            inventoryItemId: p.inventoryItemId || p.itemId,
-            productId: p.productId || p.inventoryItemId || p.itemId,
-            itemName: p.itemName.trim(),
-            description: p.description?.trim() || undefined,
-            quantity: Math.max(1, Number(p.quantity) || 1),
-            unitPrice: Math.max(0, Number(p.unitPrice) || 0),
-            isWarrantyCovered: Boolean(p.isWarrantyCovered),
-          })),
+        diagnosis: (diagnosis && diagnosis.trim()) || undefined,
+        technicianNotes: (technicianNotes && technicianNotes.trim()) || undefined,
+        partsReplaced: sanitizedParts,
         serviceCharge: parsedLabor,
-        gstEnabled,
+        gstEnabled: Boolean(gstEnabled),
         gstRate: gstEnabled ? effectiveGstRate : undefined,
         payment: {
           method: completionPaymentMethod,
           amount: paidNum,
-          reference: completionPaymentMethod === 'ONLINE' ? (completionPaymentReference.trim() || undefined) : undefined,
+          reference: completionPaymentMethod === 'ONLINE' ? ((completionPaymentReference && completionPaymentReference.trim()) || undefined) : undefined,
         },
-        businessFields,
-        customerSignatureFileId: customerConfirmed
-          ? customerSignerName.trim() || 'Customer Confirmed'
-          : undefined,
+        businessFields: businessFields && Object.keys(businessFields).length > 0 ? businessFields : undefined,
+        customerSignatureFileId:
+          customerConfirmed && customerSignerName && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customerSignerName.trim())
+            ? customerSignerName.trim()
+            : undefined,
+        customerRemarks: [
+          (customerRemarks && customerRemarks.trim()) || undefined,
+          customerConfirmed && customerSignerName && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customerSignerName.trim())
+            ? `Customer Confirmed by: ${customerSignerName.trim() || 'Customer'}`
+            : undefined,
+        ]
+          .filter(Boolean)
+          .join(' | ') || undefined,
       });
 
       setIsExecutionModalOpen(false);
@@ -362,12 +443,21 @@ export const TechnicianServiceDetailPage: React.FC = () => {
           console.warn('[Tracking] Clean stop tracking notice on job completion:', stopErr);
         }
       }
-      
-      // Invalidate Admin and CRM caches so generated invoice immediately appears
+
+      // Clear persistent current job from localStorage so technician is no longer stuck on active job
+      try {
+        localStorage.removeItem('technician_current_job_id');
+        localStorage.removeItem('technician_current_job_data');
+      } catch {}
+
+      // Invalidate Admin, CRM, and Technician caches so generated invoice and completed state immediately appear
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       queryClient.invalidateQueries({ queryKey: ['services'] });
       queryClient.invalidateQueries({ queryKey: ['job-cards'] });
       queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['technician'] });
+      queryClient.invalidateQueries({ queryKey: ['technician-services'] });
+      queryClient.invalidateQueries({ queryKey: ['technician-summary'] });
 
       await fetchServiceDetail();
     } catch (err: any) {
@@ -375,6 +465,100 @@ export const TechnicianServiceDetailPage: React.FC = () => {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  // Helper: Add part from inventory catalog
+  const handleAddCatalogPart = () => {
+    const mat = catalogMaterials.find((m) => m.id === selectedMaterialId);
+    if (!mat) return;
+
+    const existingIdx = partsReplaced.findIndex(
+      (p) => (p.productId || p.inventoryItemId) === mat.id
+    );
+    if (existingIdx >= 0) {
+      handleUpdatePart(
+        existingIdx,
+        'quantity',
+        partsReplaced[existingIdx].quantity + selectedPartQty
+      );
+    } else {
+      setPartsReplaced((prev) => [
+        ...prev,
+        {
+          productId: mat.id,
+          inventoryItemId: mat.id,
+          itemId: mat.id,
+          itemName: mat.name,
+          sku: mat.sku,
+          description: [mat.brand, mat.model].filter(Boolean).join(' '),
+          quantity: selectedPartQty,
+          unitPrice: mat.unitPrice || 0,
+          isWarrantyCovered: false,
+          inventoryDeducted: false,
+        },
+      ]);
+    }
+    setSelectedMaterialId('');
+    setSelectedPartQty(1);
+  };
+
+  // Helper: Commit any pending manual or catalog draft spare part into partsReplaced
+  const commitPendingDraftSpare = (): PartReplacedEntry[] => {
+    let updated = [...partsReplaced];
+    if (sparePartEntryMode === 'manual' && manualPartName.trim()) {
+      const priceNum = Math.max(0, parseFloat(manualPartPrice) || 0);
+      const qtyNum = Math.max(1, parseInt(String(manualPartQty)) || 1);
+      const newPart: PartReplacedEntry = {
+        itemName: manualPartName.trim(),
+        quantity: qtyNum,
+        unitPrice: priceNum,
+        isWarrantyCovered: false,
+        inventoryDeducted: false,
+      };
+      updated = [...updated, newPart];
+      setPartsReplaced(updated);
+      setManualPartName('');
+      setManualPartQty(1);
+      setManualPartPrice('');
+    } else if (sparePartEntryMode === 'catalog' && selectedMaterialId) {
+      const mat = catalogMaterials.find((m) => m.id === selectedMaterialId);
+      if (mat) {
+        const existingIdx = updated.findIndex(
+          (p) => (p.productId || p.inventoryItemId) === mat.id
+        );
+        if (existingIdx >= 0) {
+          updated[existingIdx] = {
+            ...updated[existingIdx],
+            quantity: updated[existingIdx].quantity + selectedPartQty,
+          };
+        } else {
+          updated = [
+            ...updated,
+            {
+              productId: mat.id,
+              inventoryItemId: mat.id,
+              itemId: mat.id,
+              itemName: mat.name,
+              sku: mat.sku,
+              quantity: selectedPartQty,
+              unitPrice: Number(mat.unitPrice || 0),
+              isWarrantyCovered: selectedPartWarranty,
+              inventoryDeducted: false,
+            },
+          ];
+        }
+        setPartsReplaced(updated);
+        setSelectedMaterialId('');
+        setSelectedPartQty(1);
+        setSelectedPartWarranty(false);
+      }
+    }
+    return updated;
+  };
+
+  // Helper: Add direct manual part from form inputs
+  const handleAddDirectManualPart = () => {
+    commitPendingDraftSpare();
   };
 
   // Helper: Add manual part row
@@ -581,18 +765,26 @@ export const TechnicianServiceDetailPage: React.FC = () => {
     mapQuery
   )}`;
 
-  const isOnHold = service.status === 'ON_HOLD' || (service as any).jobCardStatus === 'ON_HOLD';
+  const isCompleted =
+    service.status === 'COMPLETED' ||
+    (service as any).jobCardStatus === 'COMPLETED' ||
+    (service as any).jobCardStatus === 'CUSTOMER_CONFIRMED' ||
+    (service as any).jobCardStatus === 'CLOSED';
+  const isOnHold =
+    (service.status === 'ON_HOLD' || (service as any).jobCardStatus === 'ON_HOLD') &&
+    !isCompleted;
   const isInProgress =
+    !isCompleted &&
     (service.status === 'IN_PROGRESS' ||
       (service as any).jobCardStatus === 'IN_PROGRESS' ||
       (service as any).jobCardStatus === 'STARTED' ||
       (service as any).jobCardStatus === 'DIAGNOSIS') &&
     !isOnHold;
   const isAssigned =
+    !isCompleted &&
     (service.status === 'ASSIGNED' || service.status === 'SCHEDULED') &&
     !isInProgress &&
     !isOnHold;
-  const isCompleted = service.status === 'COMPLETED' || (service as any).jobCardStatus === 'COMPLETED';
 
 
   const hasCustomerCoordinates = Boolean(
@@ -951,7 +1143,11 @@ export const TechnicianServiceDetailPage: React.FC = () => {
             {/* Primary Hero Action: Complete Job */}
             <button
               type="button"
-              onClick={() => setIsExecutionModalOpen(true)}
+              onClick={() => {
+                setExecutionMode('complete');
+                setActionError(null);
+                setIsExecutionModalOpen(true);
+              }}
               disabled={Boolean(actionLoading)}
               className="w-full py-3.5 sm:py-4 px-5 rounded-btn bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-sm transition-all cursor-pointer disabled:opacity-50 min-h-[48px]"
             >
@@ -963,7 +1159,15 @@ export const TechnicianServiceDetailPage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <button
                 type="button"
-                onClick={() => setIsExecutionModalOpen(true)}
+                onClick={() => {
+                  setExecutionMode('complete');
+                  setSparePartEntryMode('manual');
+                  setManualPartName('');
+                  setManualPartQty(1);
+                  setManualPartPrice('');
+                  setActionError(null);
+                  setIsExecutionModalOpen(true);
+                }}
                 className="py-3 px-4 rounded-btn bg-primary-50 hover:bg-primary-100 border border-primary-200 text-primary-700 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer min-h-[44px]"
               >
                 <FileText className="w-4 h-4 text-primary-600" />
@@ -972,7 +1176,15 @@ export const TechnicianServiceDetailPage: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => setIsHoldModalOpen(true)}
+                onClick={() => {
+                  setExecutionMode('hold');
+                  setSparePartEntryMode('manual');
+                  setManualPartName('');
+                  setManualPartQty(1);
+                  setManualPartPrice('');
+                  setActionError(null);
+                  setIsExecutionModalOpen(true);
+                }}
                 disabled={Boolean(actionLoading)}
                 className="py-3 px-4 rounded-btn bg-slate-100 hover:bg-slate-200 border border-slate-200 text-amber-800 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-50 min-h-[44px]"
               >
@@ -986,9 +1198,25 @@ export const TechnicianServiceDetailPage: React.FC = () => {
         {/* State 3: ON_HOLD */}
         {isOnHold && (
           <div className="space-y-3">
-            <div className="text-xs sm:text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3 font-medium">
-              <Pause className="w-5 h-5 text-amber-600 flex-shrink-0" />
-              <span>This job is currently paused on hold. Press Resume to continue work.</span>
+            <div className="text-xs sm:text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 font-medium">
+              <Pause className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1.5 flex-1">
+                <div className="font-semibold">This job is currently paused on hold. Press Resume to continue work.</div>
+                {(service?.holdReason || (service?.technicianNotes && service.technicianNotes.includes('[Hold reason]:'))) && (
+                  <div className="text-xs text-amber-800 bg-amber-100/70 p-2.5 rounded-lg border border-amber-200">
+                    <span className="font-bold">Hold Reason: </span>
+                    {service?.holdReason ||
+                      service?.technicianNotes?.split('[Hold reason]:')[1]?.split('\n')[0]?.trim() ||
+                      'On Hold'}
+                  </div>
+                )}
+                {partsReplaced.length > 0 && (
+                  <div className="text-xs text-amber-800">
+                    <span className="font-semibold">Recorded Parts: </span>
+                    {partsReplaced.map((p) => `${p.itemName} (x${p.quantity})`).join(', ')}
+                  </div>
+                )}
+              </div>
             </div>
             <button
               type="button"
@@ -1079,6 +1307,97 @@ export const TechnicianServiceDetailPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* 6. Active Execution & Spare Parts Used Card */}
+      {(partsReplaced.length > 0 || workPerformed || diagnosis) && (
+        <div className="bg-white border border-slate-200/90 rounded-card p-5 sm:p-6 shadow-2xs space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+              <Package className="w-4 h-4 text-primary-600" />
+              <span>Active Job Execution & Spare Parts Used</span>
+            </h2>
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+              {partsReplaced.length} Part(s) Logged
+            </span>
+          </div>
+
+          {/* Work & Diagnosis */}
+          {(diagnosis || workPerformed) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              {diagnosis && (
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+                  <span className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
+                    Diagnosis
+                  </span>
+                  <div className="text-slate-800 font-medium">{diagnosis}</div>
+                </div>
+              )}
+              {workPerformed && (
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+                  <span className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
+                    Work Performed
+                  </span>
+                  <div className="text-slate-800 font-medium">{workPerformed}</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Spare Parts List */}
+          {partsReplaced.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[10px] font-bold uppercase text-slate-500">
+                Recorded Spare Parts
+              </div>
+              <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                    <tr>
+                      <th className="p-2.5 pl-3">Item Name</th>
+                      <th className="p-2.5">Source</th>
+                      <th className="p-2.5 text-center">Qty</th>
+                      <th className="p-2.5 text-right">Unit Price</th>
+                      <th className="p-2.5 text-right pr-3">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {partsReplaced.map((part, idx) => {
+                      const isInv = Boolean(part.productId || part.inventoryItemId);
+                      const unitPrice = Number(part.unitPrice || 0);
+                      const lineTotal = part.isWarrantyCovered ? 0 : unitPrice * (part.quantity || 1);
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50/50">
+                          <td className="p-2.5 pl-3 font-medium text-slate-900">{part.itemName}</td>
+                          <td className="p-2.5">
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                isInv
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-slate-100 text-slate-600 border border-slate-200'
+                              }`}
+                            >
+                              {isInv ? 'Inventory' : 'Manual'}
+                            </span>
+                          </td>
+                          <td className="p-2.5 text-center font-bold">{part.quantity}</td>
+                          <td className="p-2.5 text-right font-mono">₹{unitPrice.toFixed(2)}</td>
+                          <td className="p-2.5 text-right pr-3 font-mono font-bold text-slate-900">
+                            {part.isWarrantyCovered ? (
+                              <span className="text-emerald-600 text-[11px]">₹0.00 (Warranty)</span>
+                            ) : (
+                              `₹${lineTotal.toFixed(2)}`
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 8. Billing & Invoice Summary */}
       <div className="bg-white border border-slate-200/90 rounded-card p-5 sm:p-6 shadow-2xs space-y-4">
@@ -1255,59 +1574,7 @@ export const TechnicianServiceDetailPage: React.FC = () => {
         )}
       </div>
 
-      {/* MODAL 1: PUT ON HOLD */}
-      {isHoldModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200/90 rounded-modal p-6 w-full max-w-md space-y-4 shadow-modal">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Pause className="w-4 h-4 text-amber-500" />
-                <span>Put Job on Hold</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsHoldModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-500">
-              Please specify the reason this job is being paused (e.g., waiting for parts, site
-              inaccessible, customer unavailable).
-            </p>
-
-            <textarea
-              value={holdReason}
-              onChange={(e) => setHoldReason(e.target.value)}
-              placeholder="Enter hold reason..."
-              rows={3}
-              className="w-full bg-white border border-slate-300 rounded-btn p-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
-            />
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsHoldModalOpen(false)}
-                className="px-4 py-2 rounded-btn bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleHoldJob}
-                disabled={Boolean(actionLoading)}
-                className="px-4 py-2 rounded-btn bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
-              >
-                {actionLoading === 'hold' ? 'Saving...' : 'Confirm Hold'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: EXECUTION & WORK RECORDING FORM */}
+      {/* MODAL: EXECUTION & WORK RECORDING FORM (Supports both Completion and On-Hold Checkpoints) */}
       {isExecutionModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-white border border-slate-200/90 rounded-modal p-5 sm:p-6 w-full max-w-2xl my-8 space-y-5 shadow-modal">
@@ -1315,11 +1582,22 @@ export const TechnicianServiceDetailPage: React.FC = () => {
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <Wrench className="w-4 h-4 text-primary-600" />
-                  <span>Job Execution Form</span>
+                  {executionMode === 'hold' ? (
+                    <>
+                      <Pause className="w-4 h-4 text-amber-600" />
+                      <span>Job Execution Form — Put Job on Hold</span>
+                    </>
+                  ) : (
+                    <>
+                      <Wrench className="w-4 h-4 text-primary-600" />
+                      <span>Job Execution Form</span>
+                    </>
+                  )}
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Record work performed, consumed parts, and complete this work order.
+                  {executionMode === 'hold'
+                    ? 'Record work performed, consumed parts, and specify hold reason before pausing.'
+                    : 'Record work performed, consumed parts, and complete this work order.'}
                 </p>
               </div>
               <button
@@ -1340,53 +1618,234 @@ export const TechnicianServiceDetailPage: React.FC = () => {
             )}
 
             <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-              {/* Section 1: Diagnosis */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700">
-                  Diagnosis / Problem Identification
-                </label>
-                <textarea
-                  value={diagnosis}
-                  onChange={(e) => setDiagnosis(e.target.value)}
-                  placeholder="Identify technical root cause or observed symptom..."
-                  rows={2}
-                  className="w-full bg-white border border-slate-300 rounded-btn p-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
-                />
-              </div>
+              {/* Hold Reason Section (Optional) */}
+              {executionMode === 'hold' && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                    <Pause className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Hold Reason <span className="text-slate-400 font-normal">(Optional)</span></span>
+                  </label>
+                  <textarea
+                    value={holdReason}
+                    onChange={(e) => setHoldReason(e.target.value)}
+                    placeholder="Specify reason for pausing (e.g., waiting for parts, site inaccessible - optional)..."
+                    rows={2}
+                    className="w-full bg-white border border-slate-300 rounded-btn p-2.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  />
+                </div>
+              )}
 
-              {/* Section 2: Work Performed (MANDATORY FOR COMPLETION) */}
+              {/* Section 1: Diagnosis (Only for completion) */}
+              {executionMode === 'complete' && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700">
+                    Diagnosis / Problem Identification
+                  </label>
+                  <textarea
+                    value={diagnosis}
+                    onChange={(e) => setDiagnosis(e.target.value)}
+                    placeholder="Identify technical root cause or observed symptom..."
+                    rows={2}
+                    className="w-full bg-white border border-slate-300 rounded-btn p-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                  />
+                </div>
+              )}
+
+              {/* Section 2: Work Performed */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-slate-700">
-                    Work Performed <span className="text-rose-500">*</span>
+                    Work Performed {executionMode === 'complete' ? <span className="text-rose-500">*</span> : <span className="text-slate-400 font-normal">(Optional)</span>}
                   </label>
-                  <span className="text-[10px] text-amber-700 font-semibold">Required for completion</span>
+                  {executionMode === 'complete' && (
+                    <span className="text-[10px] font-semibold text-amber-700">Required for completion</span>
+                  )}
                 </div>
                 <textarea
                   value={workPerformed}
                   onChange={(e) => setWorkPerformed(e.target.value)}
-                  placeholder="Describe step-by-step actions performed (e.g., inspected equipment, replaced worn part, tested operation)..."
-                  rows={3}
-                  className="w-full bg-white border border-slate-300 rounded-btn p-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                  placeholder={executionMode === 'hold' ? 'Describe work done so far (optional)...' : 'Describe step-by-step actions performed (e.g., inspected equipment, replaced worn part, tested operation)...'}
+                  rows={2}
+                  className="w-full bg-white border border-slate-300 rounded-btn p-2.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
                 />
               </div>
 
-              {/* Section 3: Spare Parts Used (Manual Entry) */}
+              {/* Section 3: Spare Parts Used */}
               <div className="space-y-3 p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
-                    <Package className="w-3.5 h-3.5 text-primary-600" />
-                    <span>Spare Parts Used</span>
-                  </label>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                      <Package className="w-3.5 h-3.5 text-primary-600" />
+                      <span>Spare Parts Used <span className="text-slate-400 font-normal">(Optional)</span></span>
+                    </label>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Adding parts is optional. You can enter manual parts or select from inventory catalog.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAddManualPart}
+                      className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-medium text-xs flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                      title="Add blank custom part row directly"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>+ Custom Row</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Mode Switcher: Manual Part vs. Optional Inventory Catalog */}
+                <div className="flex items-center gap-2 pt-1 border-t border-slate-200/80">
                   <button
                     type="button"
-                    onClick={handleAddManualPart}
-                    className="px-2.5 py-1 rounded-lg bg-primary-600 hover:bg-primary-700 text-white font-semibold text-xs flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                    onClick={() => setSparePartEntryMode('manual')}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      sparePartEntryMode === 'manual'
+                        ? 'bg-primary-600 text-white shadow-2xs'
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Add Spare Part</span>
+                    <span>Add Manual Part</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSparePartEntryMode('catalog')}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      sparePartEntryMode === 'catalog'
+                        ? 'bg-primary-600 text-white shadow-2xs'
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Package className="w-3.5 h-3.5" />
+                    <span>From Inventory Catalog <span className="text-[10px] font-normal opacity-85">(Optional)</span></span>
                   </button>
                 </div>
+
+                {/* Option 1: Manual Spare Part Form */}
+                {sparePartEntryMode === 'manual' && (
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-bold text-slate-700">
+                        Add Manual Spare Part (No Inventory Required)
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-medium">Custom item entry</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                      <div className="sm:col-span-6">
+                        <input
+                          type="text"
+                          value={manualPartName}
+                          onChange={(e) => setManualPartName(e.target.value)}
+                          placeholder="Part / Item name (e.g. Copper Pipe, Filter, Valve)"
+                          className="w-full bg-slate-50 border border-slate-300 rounded-btn p-2 text-xs text-slate-900 focus:outline-none focus:border-primary-500 focus:bg-white"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddDirectManualPart();
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <input
+                          type="number"
+                          min="1"
+                          value={manualPartQty}
+                          onChange={(e) => setManualPartQty(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-btn p-2 text-xs text-slate-900 font-mono text-center focus:outline-none focus:border-primary-500 focus:bg-white"
+                          placeholder="Qty"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="10"
+                          value={manualPartPrice}
+                          onChange={(e) => setManualPartPrice(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-btn p-2 text-xs text-slate-900 font-mono text-center focus:outline-none focus:border-primary-500 focus:bg-white"
+                          placeholder="₹ Price"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddDirectManualPart();
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <button
+                          type="button"
+                          onClick={handleAddDirectManualPart}
+                          disabled={!manualPartName.trim()}
+                          className="w-full py-2 px-3 rounded-btn bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-2xs disabled:opacity-50"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Option 2: Active Inventory Catalog (Optional) */}
+                {sparePartEntryMode === 'catalog' && (
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-bold text-slate-700">
+                        Select from Active Inventory Catalog <span className="text-slate-400 font-normal">(Optional)</span>
+                      </label>
+                      <span className="text-[10px] text-slate-500 font-medium">Authoritative pricing & stock</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                      <div className="sm:col-span-7">
+                        <select
+                          value={selectedMaterialId}
+                          onChange={(e) => setSelectedMaterialId(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-btn p-2 text-xs text-slate-900 focus:outline-none focus:border-primary-500 focus:bg-white"
+                        >
+                          <option value="">-- Choose spare part from inventory (Optional) --</option>
+                          {catalogMaterials.map((mat) => {
+                            const stockCount = mat.currentStock ?? 0;
+                            return (
+                              <option
+                                key={mat.id}
+                                value={mat.id}
+                                disabled={stockCount <= 0}
+                              >
+                                {mat.name} {mat.sku ? `(${mat.sku})` : ''} — ₹{Number(mat.unitPrice || 0).toFixed(2)} [Stock: {stockCount}]
+                                {stockCount <= 0 ? ' (Out of Stock)' : ''}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <input
+                          type="number"
+                          min="1"
+                          value={selectedPartQty}
+                          onChange={(e) => setSelectedPartQty(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-btn p-2 text-xs text-slate-900 font-mono text-center focus:outline-none focus:border-primary-500 focus:bg-white"
+                          placeholder="Qty"
+                        />
+                      </div>
+                      <div className="sm:col-span-3">
+                        <button
+                          type="button"
+                          onClick={handleAddCatalogPart}
+                          disabled={!selectedMaterialId}
+                          className="w-full py-2 px-3 rounded-btn bg-primary-600 hover:bg-primary-700 text-white font-bold text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-2xs disabled:opacity-50"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add from Stock</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {partsReplaced.length > 0 ? (
                   <div className="space-y-2.5 pt-1">
@@ -1394,25 +1853,63 @@ export const TechnicianServiceDetailPage: React.FC = () => {
                       const lineTotal = part.isWarrantyCovered
                         ? 0
                         : (Number(part.unitPrice) || 0) * (Number(part.quantity) || 1);
+                      const isInventoryItem = Boolean(part.productId || part.inventoryItemId);
                       return (
                         <div
                           key={index}
                           className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 shadow-2xs"
                         >
+                          <div className="flex flex-wrap items-center justify-between gap-1 pb-1 border-b border-slate-100">
+                            <div className="flex items-center gap-2">
+                              {part.inventoryDeducted ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                  Stock Deducted (Held)
+                                </span>
+                              ) : isInventoryItem ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  From Inventory
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                  Manual / Custom Part
+                                </span>
+                              )}
+                              {part.sku && (
+                                <span className="text-[10px] font-mono text-slate-500">
+                                  SKU: {part.sku}
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePart(index)}
+                              className="px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 rounded-btn flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Remove Part"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Remove</span>
+                            </button>
+                          </div>
+
                           <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                            <div className="sm:col-span-6">
+                            <div className="sm:col-span-7">
                               <label className="text-[10px] text-slate-500 uppercase font-semibold">
                                 Part / Item Name *
                               </label>
                               <input
                                 type="text"
                                 value={part.itemName}
+                                readOnly={isInventoryItem}
                                 onChange={(e) => handleUpdatePart(index, 'itemName', e.target.value)}
                                 placeholder="Part / Item Name"
-                                className="w-full bg-slate-50 border border-slate-300 rounded-btn p-2 text-xs text-slate-900 focus:outline-none focus:border-primary-500 focus:bg-white"
+                                className={`w-full border rounded-btn p-2 text-xs focus:outline-none ${
+                                  isInventoryItem
+                                    ? 'bg-slate-100/80 border-slate-200 text-slate-700 cursor-default'
+                                    : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-primary-500 focus:bg-white'
+                                }`}
                               />
                             </div>
-                            <div className="sm:col-span-4">
+                            <div className="sm:col-span-5">
                               <label className="text-[10px] text-slate-500 uppercase font-semibold">
                                 Description (Optional)
                               </label>
@@ -1423,17 +1920,6 @@ export const TechnicianServiceDetailPage: React.FC = () => {
                                 placeholder="Description"
                                 className="w-full bg-slate-50 border border-slate-300 rounded-btn p-2 text-xs text-slate-900 focus:outline-none focus:border-primary-500 focus:bg-white"
                               />
-                            </div>
-                            <div className="sm:col-span-2 flex items-center justify-end">
-                              <button
-                                type="button"
-                                onClick={() => handleRemovePart(index)}
-                                className="px-2.5 py-1.5 text-xs text-rose-600 hover:bg-rose-50 rounded-btn flex items-center gap-1 cursor-pointer transition-colors"
-                                title="Remove Part"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span>Remove</span>
-                              </button>
                             </div>
                           </div>
 
@@ -1456,11 +1942,16 @@ export const TechnicianServiceDetailPage: React.FC = () => {
                                 type="number"
                                 min="0"
                                 step="10"
+                                readOnly={isInventoryItem}
                                 value={part.unitPrice !== undefined ? part.unitPrice : 0}
                                 onChange={(e) =>
                                   handleUpdatePart(index, 'unitPrice', Math.max(0, parseFloat(e.target.value) || 0))
                                 }
-                                className="w-full bg-slate-50 border border-slate-300 rounded-btn p-1.5 text-xs text-slate-900 font-mono focus:outline-none focus:border-primary-500 focus:bg-white"
+                                className={`w-full border rounded-btn p-1.5 text-xs font-mono focus:outline-none ${
+                                  isInventoryItem
+                                    ? 'bg-slate-100/80 border-slate-200 text-slate-700 cursor-default'
+                                    : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-primary-500 focus:bg-white'
+                                }`}
                               />
                             </div>
                             <div className="sm:col-span-3 flex items-center pt-3">
@@ -1493,20 +1984,20 @@ export const TechnicianServiceDetailPage: React.FC = () => {
                   <div className="p-4 text-center text-xs text-slate-500 bg-white rounded-xl border border-dashed border-slate-200">
                     <p>No spare parts recorded.</p>
                     <p className="text-[11px] text-slate-400 mt-0.5">
-                      Click <strong>[ + Add Spare Part ]</strong> if any replacement parts or components were used.
+                      Spare parts are optional. You can enter a manual part above or choose from inventory catalog.
                     </p>
                   </div>
                 )}
               </div>
 
               {/* Section 4: Manual Service Charge */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-2">
+              <div className="p-3 bg-slate-50 border border-slate-200/90 rounded-xl space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
                     <Wrench className="w-3.5 h-3.5 text-primary-600" />
-                    <span>Service Charge</span>
+                    <span>Service Charge <span className="text-slate-400 font-normal">(Optional)</span></span>
                   </label>
-                  <span className="text-[10px] text-slate-500">Manual service / labor fee</span>
+                  <span className="text-[10px] text-slate-500">Labor fee</span>
                 </div>
                 <div className="relative">
                   <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-xs">₹</span>
@@ -1522,140 +2013,145 @@ export const TechnicianServiceDetailPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Section 5: GST Configuration */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="inline-flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={gstEnabled}
-                      onChange={(e) => setGstEnabled(e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
-                    />
-                    <span className="text-xs font-bold text-slate-800">Add GST</span>
-                  </label>
-                  <span
-                    className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                      gstEnabled
-                        ? 'bg-primary-100 text-primary-800 border border-primary-200'
-                        : 'bg-slate-200 text-slate-600'
-                    }`}
-                  >
-                    {gstEnabled ? 'GST Enabled' : 'GST OFF'}
-                  </span>
-                </div>
+              {/* Section 5: GST Configuration (Only in Complete mode) */}
+              {executionMode === 'complete' && (
+                <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="inline-flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={gstEnabled}
+                        onChange={(e) => setGstEnabled(e.target.checked)}
+                        className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                      />
+                      <span className="text-xs font-bold text-slate-800">Add GST</span>
+                    </label>
+                    <span
+                      className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                        gstEnabled
+                          ? 'bg-primary-100 text-primary-800 border border-primary-200'
+                          : 'bg-slate-200 text-slate-600'
+                      }`}
+                    >
+                      {gstEnabled ? 'GST Enabled' : 'GST OFF'}
+                    </span>
+                  </div>
 
-                {gstEnabled && (
-                  <div className="pt-2 border-t border-slate-200 space-y-2">
-                    <label className="text-[11px] font-semibold text-slate-700">Select GST Rate</label>
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                      {[5, 12, 18, 28].map((rate) => (
+                  {gstEnabled && (
+                    <div className="pt-2 border-t border-slate-200 space-y-2">
+                      <label className="text-[11px] font-semibold text-slate-700">Select GST Rate</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                        {[5, 12, 18, 28].map((rate) => (
+                          <button
+                            key={rate}
+                            type="button"
+                            onClick={() => {
+                              setGstRate(rate);
+                              setIsCustomGstRate(false);
+                            }}
+                            className={`py-1.5 px-2 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                              !isCustomGstRate && gstRate === rate
+                                ? 'bg-primary-600 border-primary-600 text-white shadow-2xs'
+                                : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            {rate}%
+                          </button>
+                        ))}
                         <button
-                          key={rate}
                           type="button"
-                          onClick={() => {
-                            setGstRate(rate);
-                            setIsCustomGstRate(false);
-                          }}
+                          onClick={() => setIsCustomGstRate(true)}
                           className={`py-1.5 px-2 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
-                            !isCustomGstRate && gstRate === rate
+                            isCustomGstRate
                               ? 'bg-primary-600 border-primary-600 text-white shadow-2xs'
                               : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
                           }`}
                         >
-                          {rate}%
+                          Custom
                         </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setIsCustomGstRate(true)}
-                        className={`py-1.5 px-2 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
-                          isCustomGstRate
-                            ? 'bg-primary-600 border-primary-600 text-white shadow-2xs'
-                            : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
-                        }`}
-                      >
-                        Custom
-                      </button>
-                    </div>
-
-                    {isCustomGstRate && (
-                      <div className="pt-1">
-                        <label className="text-[10px] text-slate-500 uppercase font-semibold">
-                          Custom GST Rate (%)
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.5"
-                          value={customGstRateInput}
-                          onChange={(e) => setCustomGstRateInput(e.target.value)}
-                          placeholder="e.g. 12"
-                          className="w-full bg-white border border-slate-300 rounded-btn p-2 text-xs text-slate-900 font-mono font-medium focus:outline-none focus:border-primary-500 mt-1"
-                        />
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
 
-              {/* Section 6: Payment Method */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-3">
-                <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
-                  <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Payment Method <span className="text-rose-500">*</span></span>
-                </label>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setCompletionPaymentMethod('CASH')}
-                    className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
-                      completionPaymentMethod === 'CASH'
-                        ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20 shadow-xs'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span className="text-base">💵</span>
-                    <span>CASH</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setCompletionPaymentMethod('ONLINE')}
-                    className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
-                      completionPaymentMethod === 'ONLINE'
-                        ? 'bg-blue-50 border-blue-500 text-blue-800 ring-2 ring-blue-500/20 shadow-xs'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span className="text-base">📱</span>
-                    <span>ONLINE</span>
-                  </button>
+                      {isCustomGstRate && (
+                        <div className="pt-1">
+                          <label className="text-[10px] text-slate-500 uppercase font-semibold">
+                            Custom GST Rate (%)
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.5"
+                            value={customGstRateInput}
+                            onChange={(e) => setCustomGstRateInput(e.target.value)}
+                            placeholder="e.g. 12"
+                            className="w-full bg-white border border-slate-300 rounded-btn p-2 text-xs text-slate-900 font-mono font-medium focus:outline-none focus:border-primary-500 mt-1"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
+              )}
 
-                {completionPaymentMethod === 'ONLINE' && (
-                  <div>
-                    <label className="text-[10px] text-slate-500 uppercase font-semibold">
-                      Transaction Reference / ID (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={completionPaymentReference}
-                      onChange={(e) => setCompletionPaymentReference(e.target.value)}
-                      placeholder="e.g. Transaction Ref / UTR / Reference ID"
-                      className="w-full bg-white border border-slate-300 rounded-btn p-2.5 text-xs text-slate-900 mt-1 focus:outline-none focus:border-blue-500"
-                    />
+              {executionMode === 'complete' && (
+                /* Section 6: Payment Method (Only in Complete mode) */
+                <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-3">
+                  <label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                    <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Payment Method <span className="text-rose-500">*</span></span>
+                  </label>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setCompletionPaymentMethod('CASH')}
+                      className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                        completionPaymentMethod === 'CASH'
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20 shadow-xs'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="text-base">💵</span>
+                      <span>CASH</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setCompletionPaymentMethod('ONLINE')}
+                      className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                        completionPaymentMethod === 'ONLINE'
+                          ? 'bg-blue-50 border-blue-500 text-blue-800 ring-2 ring-blue-500/20 shadow-xs'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="text-base">📱</span>
+                      <span>ONLINE</span>
+                    </button>
                   </div>
-                )}
-              </div>
 
-              {/* Section 7: Final Bill Summary */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-3">
-                <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2 text-xs">
-                  <div className="font-bold text-slate-800 text-[11px] uppercase tracking-wider pb-1 border-b border-slate-100 flex items-center justify-between">
-                    <span>Final Bill Summary</span>
+                  {completionPaymentMethod === 'ONLINE' && (
+                    <div>
+                      <label className="text-[10px] text-slate-500 uppercase font-semibold">
+                        Transaction Reference / ID (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={completionPaymentReference}
+                        onChange={(e) => setCompletionPaymentReference(e.target.value)}
+                        placeholder="e.g. Transaction Ref / UTR / Reference ID"
+                        className="w-full bg-white border border-slate-300 rounded-btn p-2.5 text-xs text-slate-900 mt-1 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Section 6: Bill Summary (Shown if parts/service fee entered or completing) */}
+              {(executionMode === 'complete' || partsReplaced.length > 0 || parsedLabor > 0) && (
+                <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-3">
+                  <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2 text-xs">
+                    <div className="font-bold text-slate-800 text-[11px] uppercase tracking-wider pb-1 border-b border-slate-100 flex items-center justify-between">
+                      <span>{executionMode === 'hold' ? 'Running Bill Estimate' : 'Final Bill Summary'}</span>
                     <span className="text-[10px] text-slate-500 font-mono">
                       {gstEnabled ? `GST Rate: ${effectiveGstRate}%` : 'GST: OFF'}
                     </span>
@@ -1684,121 +2180,118 @@ export const TechnicianServiceDetailPage: React.FC = () => {
                   </div>
 
                   <div className="flex justify-between text-slate-900 font-bold text-sm pt-1.5 border-t border-slate-100">
-                    <span>Total Payable</span>
+                    <span>{executionMode === 'hold' ? 'Estimated Total' : 'Total Payable'}</span>
                     <span className="font-mono text-primary-700 text-base">₹{billTotal.toFixed(2)}</span>
                   </div>
 
-                  {/* Amount Paid Field */}
-                  <div className="pt-2 border-t border-slate-100">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[11px] font-bold text-slate-700">Amount Paid (₹)</label>
-                      <button
-                        type="button"
-                        onClick={() => setCompletionPaymentAmount(billTotal.toFixed(2))}
-                        className="text-[10px] text-primary-600 hover:underline font-semibold cursor-pointer"
-                      >
-                        Fill Full Amount
-                      </button>
-                    </div>
-                    <input
-                      type="number"
-                      min="0"
-                      max={billTotal}
-                      step="1"
-                      value={completionPaymentAmount !== '' ? completionPaymentAmount : billTotal.toFixed(2)}
-                      onChange={(e) => setCompletionPaymentAmount(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-btn p-2.5 text-xs text-slate-900 font-mono font-bold focus:outline-none focus:border-primary-500"
-                      placeholder={billTotal.toFixed(2)}
-                    />
-                  </div>
+                  {executionMode === 'complete' && (
+                    <>
+                      {/* Amount Paid Field */}
+                      <div className="pt-2 border-t border-slate-100">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[11px] font-bold text-slate-700">Amount Paid (₹)</label>
+                          <button
+                            type="button"
+                            onClick={() => setCompletionPaymentAmount(billTotal.toFixed(2))}
+                            className="text-[10px] text-primary-600 hover:underline font-semibold cursor-pointer"
+                          >
+                            Fill Full Amount
+                          </button>
+                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          max={billTotal}
+                          step="1"
+                          value={completionPaymentAmount !== '' ? completionPaymentAmount : billTotal.toFixed(2)}
+                          onChange={(e) => setCompletionPaymentAmount(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-btn p-2.5 text-xs text-slate-900 font-mono font-bold focus:outline-none focus:border-primary-500"
+                          placeholder={billTotal.toFixed(2)}
+                        />
+                      </div>
 
-                  {/* Balance & Payment Status Badge */}
-                  <div className="flex items-center justify-between pt-1">
-                    <div className="text-[11px] text-slate-600">
-                      Remaining Balance: <span className="font-mono font-bold text-slate-900">₹{remainingNum.toFixed(2)}</span>
-                    </div>
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        livePaymentStatus === 'PAID'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : livePaymentStatus === 'PARTIALLY PAID'
-                          ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                          : 'bg-slate-100 text-slate-600 border border-slate-200'
-                      }`}
-                    >
-                      {livePaymentStatus}
-                    </span>
-                  </div>
+                      {/* Balance & Payment Status Badge */}
+                      <div className="flex items-center justify-between pt-1">
+                        <div className="text-[11px] text-slate-600">
+                          Remaining Balance: <span className="font-mono font-bold text-slate-900">₹{remainingNum.toFixed(2)}</span>
+                        </div>
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                            livePaymentStatus === 'PAID'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : livePaymentStatus === 'PARTIALLY PAID'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : 'bg-slate-100 text-slate-600 border border-slate-200'
+                          }`}
+                        >
+                          {livePaymentStatus}
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
+            )}
 
-              {/* Section 5: Execution Notes */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700">
-                  Technician Execution Notes
-                </label>
-                <textarea
-                  value={technicianNotes}
-                  onChange={(e) => setTechnicianNotes(e.target.value)}
-                  placeholder="Additional field observations or next maintenance recommendations..."
-                  rows={2}
+            {/* Section 5: Execution Notes (Optional) */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700">
+                Technician Execution Notes <span className="text-slate-400 font-normal">(Optional)</span>
+              </label>
+              <textarea
+                value={technicianNotes}
+                onChange={(e) => setTechnicianNotes(e.target.value)}
+                placeholder="Additional field observations or next maintenance recommendations (optional)..."
+                rows={2}
                   className="w-full bg-white border border-slate-300 rounded-btn p-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
                 />
               </div>
 
-              {/* Section 6: Customer Confirmation */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-2.5">
-                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                  <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Customer Confirmation & Sign-Off</span>
-                </label>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="customer-confirm-check"
-                    checked={customerConfirmed}
-                    onChange={(e) => setCustomerConfirmed(e.target.checked)}
-                    className="rounded border-slate-300 text-emerald-600 focus:ring-0 cursor-pointer"
-                  />
-                  <label
-                    htmlFor="customer-confirm-check"
-                    className="text-xs text-slate-700 cursor-pointer font-medium"
-                  >
-                    Customer verified completed service and satisfactory operation
+              {/* Section 6: Customer Confirmation (Only in Complete mode) */}
+              {executionMode === 'complete' && (
+                <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-xl space-y-2.5">
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                    <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Customer Confirmation & Sign-Off</span>
                   </label>
-                </div>
 
-                {customerConfirmed && (
-                  <div>
-                    <label className="text-[10px] text-slate-500 uppercase font-semibold">
-                      Customer Signer Name / Representative
-                    </label>
+                  <div className="flex items-center gap-2">
                     <input
-                      type="text"
-                      value={customerSignerName}
-                      onChange={(e) => setCustomerSignerName(e.target.value)}
-                      placeholder={service.customer.fullName || 'Enter signer name'}
-                      className="w-full bg-white border border-slate-300 rounded-btn p-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 mt-1"
+                      type="checkbox"
+                      id="customer-confirm-check"
+                      checked={customerConfirmed}
+                      onChange={(e) => setCustomerConfirmed(e.target.checked)}
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-0 cursor-pointer"
                     />
+                    <label
+                      htmlFor="customer-confirm-check"
+                      className="text-xs text-slate-700 cursor-pointer font-medium"
+                    >
+                      Customer verified completed service and satisfactory operation
+                    </label>
                   </div>
-                )}
-              </div>
+
+                  {customerConfirmed && (
+                    <div>
+                      <label className="text-[10px] text-slate-500 uppercase font-semibold">
+                        Customer Signer Name / Representative
+                      </label>
+                      <input
+                        type="text"
+                        value={customerSignerName}
+                        onChange={(e) => setCustomerSignerName(e.target.value)}
+                        placeholder={service.customer.fullName || 'Enter signer name'}
+                        className="w-full bg-white border border-slate-300 rounded-btn p-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 mt-1"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Modal Footer Controls */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={handleSaveProgress}
-                disabled={Boolean(actionLoading)}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-btn bg-white hover:bg-slate-50 border border-slate-200/90 text-slate-700 font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shadow-2xs"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>{actionLoading === 'save' ? 'SAVING...' : 'SAVE PROGRESS'}</span>
-              </button>
-
-              <div className="flex items-center gap-2.5 w-full sm:w-auto">
+            {executionMode === 'hold' ? (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsExecutionModalOpen(false)}
@@ -1806,25 +2299,60 @@ export const TechnicianServiceDetailPage: React.FC = () => {
                 >
                   Cancel
                 </button>
+
                 <button
                   type="button"
-                  onClick={() => {
-                    if (!workPerformed.trim()) {
-                      setActionError('Work performed description is required to complete this job.');
-                      return;
-                    }
-                    setIsCompletionConfirmOpen(true);
-                  }}
-                  disabled={Boolean(actionLoading) || !workPerformed.trim()}
-                  className="w-full sm:w-auto px-5 py-2.5 rounded-btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                  onClick={handleSaveAndHoldJob}
+                  disabled={Boolean(actionLoading)}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-btn bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 min-h-[42px]"
                 >
-                  <CheckCircle2 className="w-4 h-4" />
+                  <Pause className="w-4 h-4 text-white" />
                   <span>
-                    {actionLoading === 'complete' ? 'COMPLETING...' : 'REVIEW & COMPLETE JOB'}
+                    {actionLoading === 'hold' ? 'SAVING & HOLDING...' : 'SAVE PROGRESS & PUT ON HOLD'}
                   </span>
                 </button>
               </div>
-            </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleSaveProgress}
+                  disabled={Boolean(actionLoading)}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-btn bg-white hover:bg-slate-50 border border-slate-200/90 text-slate-700 font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shadow-2xs"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{actionLoading === 'save' ? 'SAVING...' : 'SAVE PROGRESS'}</span>
+                </button>
+
+                <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setIsExecutionModalOpen(false)}
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-btn bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!workPerformed.trim()) {
+                        setActionError('Work performed description is required to complete this job.');
+                        return;
+                      }
+                      commitPendingDraftSpare();
+                      setIsCompletionConfirmOpen(true);
+                    }}
+                    disabled={Boolean(actionLoading) || !workPerformed.trim()}
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-btn bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>
+                      {actionLoading === 'complete' ? 'COMPLETING...' : 'REVIEW & COMPLETE JOB'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

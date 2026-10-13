@@ -586,9 +586,10 @@ export class JobCardsRepository {
         return updated;
       });
     } catch (err: any) {
+      if (err.statusCode) throw err;
+      if (process.env.NODE_ENV === 'production') throw err;
       const target = memoryJobCards.find((j) => j.id === id);
       if (!target) {
-        if (err.statusCode) throw err;
         const notFound: any = new Error('Job Card not found');
         notFound.statusCode = 404;
         throw notFound;
@@ -673,6 +674,7 @@ export class JobCardsRepository {
       });
     } catch (err: any) {
       if (err.statusCode) throw err;
+      if (process.env.NODE_ENV === 'production') throw err;
 
       const target = memoryJobCards.find((j) => j.id === id);
       if (!target) {
@@ -733,12 +735,47 @@ export class JobCardsRepository {
           })
           .where(eq(services.id, existing.serviceId));
 
+        // Synchronize memory stores
+        const memJc = memoryJobCards.find((j) => j.id === id);
+        if (memJc) {
+          memJc.status = 'COMPLETED';
+          memJc.completedAt = now;
+          memJc.updatedAt = now;
+        }
+        if (existing.serviceId) {
+          const memSrv = memoryServices.find((s) => s.id === existing.serviceId);
+          if (memSrv) {
+            memSrv.status = 'COMPLETED';
+            memSrv.completedAt = now;
+            memSrv.updatedAt = now;
+          }
+        }
+
+        try {
+          const { expensesRepository } = await import('../expenses/expenses.repository');
+          await expensesRepository.recordSparePartsExpenseForService(
+            {
+              serviceId: existing.serviceId,
+              jobCardId: id,
+              jobCardNumber: existing.jobCardNumber,
+              partsReplaced: input.partsReplaced || existing.partsReplaced,
+              completedAt: now,
+              companyId: (existing as any).companyId || null,
+              actorId,
+            },
+            tx as any
+          );
+        } catch (spareErr) {
+          console.warn('[JobCardsRepository.completeJobCard] Spare expense recording notice:', spareErr);
+        }
+
         return {
           jobCard: completedJobCard,
         };
       });
     } catch (err: any) {
       if (err.statusCode) throw err;
+      if (process.env.NODE_ENV === 'production') throw err;
 
       const target = memoryJobCards.find((j) => j.id === id);
       if (!target) {
@@ -761,6 +798,21 @@ export class JobCardsRepository {
         targetSrv.completedAt = now;
         targetSrv.updatedAt = now;
       }
+
+      try {
+        const { expensesRepository } = await import('../expenses/expenses.repository');
+        await expensesRepository.recordSparePartsExpenseForService(
+          {
+            serviceId: target.serviceId,
+            jobCardId: id,
+            jobCardNumber: target.jobCardNumber,
+            partsReplaced: input.partsReplaced || target.partsReplaced,
+            completedAt: now,
+            companyId: (target as any).companyId || null,
+            actorId,
+          }
+        );
+      } catch {}
 
       return {
         jobCard: target,

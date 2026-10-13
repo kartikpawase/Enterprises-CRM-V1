@@ -17,6 +17,7 @@ import type {
   WarrantyAnalytics,
   InquiryAnalytics,
   UserRole,
+  FinancialSummaryReport,
 } from '@crm/types';
 
 function formatYMD(d: Date): string {
@@ -460,6 +461,14 @@ export class AnalyticsService {
   }
 
   /**
+   * Get Authoritative Financial Summary (Revenue, Payments, Expenses, COGS, Net Profit, Technician Cash)
+   */
+  async getFinancialSummary(filter: AnalyticsDateFilter, companyId?: string): Promise<FinancialSummaryReport> {
+    const { current } = this.resolveDateBounds(filter);
+    return analyticsRepository.getFinancialSummary(current, companyId);
+  }
+
+  /**
    * Export Analytics Data to CSV string
    */
   async exportToCsv(filter: AnalyticsDateFilter, category: string, userRole?: UserRole): Promise<string> {
@@ -538,6 +547,21 @@ export class AnalyticsService {
         overview.technicians?.technicianBreakdown?.forEach((t: any) => {
           csv += formatCsvRow([t.technicianName, t.phone, t.assignedJobs, t.completedJobs, t.openJobs, `${t.completionRate}%`]);
         });
+        break;
+      }
+      case 'financial': {
+        const fin = await this.getFinancialSummary(filter);
+        csv = 'Financial Metric,Amount (INR)\n';
+        csv += formatCsvRow(['Total Service Revenue', fin.totalServiceRevenue]);
+        csv += formatCsvRow(['Total Customer Payments Received', fin.totalCustomerPaymentsReceived]);
+        csv += formatCsvRow(['Cost of Goods Sold (Parts COGS)', fin.cogsAmount]);
+        csv += formatCsvRow(['Gross Profit', fin.grossProfit]);
+        csv += formatCsvRow(['Operating Expenses', fin.totalExpenses]);
+        csv += formatCsvRow(['Net Operating Surplus', fin.netProfit]);
+        csv += formatCsvRow(['Cash Collected by Technicians', fin.cashCollectedByTechnicians]);
+        csv += formatCsvRow(['Cash Handed Over to Owner', fin.cashHandedOverToOwner]);
+        csv += formatCsvRow(['Pending Technician Cash', fin.pendingTechnicianCash]);
+        csv += formatCsvRow(['Shop Cash Movement Balance', fin.shopCashMovementBalance]);
         break;
       }
       case 'overview':

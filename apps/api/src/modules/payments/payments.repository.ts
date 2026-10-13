@@ -8,10 +8,16 @@ import {
   reminders,
   customerActivities,
   auditLogs,
+  services,
+  jobCards,
+  technicians,
 } from '../../database/schema/index';
+import { cashHandoversRepository } from './cash-handovers.repository';
 import { generateBusinessNumber } from '../../database/sequences';
 import { withTransaction } from '../../database/transactions';
 import { invoicesRepository, memoryInvoices } from '../invoices/invoices.repository';
+import { memoryServices } from '../services/services.repository';
+import { memoryJobCards } from '../job-cards/job-cards.repository';
 import { customerRepository } from '../customers/customer.repository';
 import { randomUUID } from 'crypto';
 import type {
@@ -837,6 +843,98 @@ export class PaymentsRepository {
           afterState: newPayment,
         });
       } catch {}
+    }
+
+    // Authoritative Cash Handover Tracking:
+    // If payment method is CASH and the invoice is associated with a technician or service
+    if (newPayment.paymentMethod === 'CASH') {
+      try {
+        let techId: string | null = null;
+        const invServiceId = (invoice as any).serviceId;
+        const invJobCardId = (invoice as any).jobCardId;
+
+        const isActorIdUuid = !!(actorId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(actorId));
+        const isInvServiceIdUuid = !!(invServiceId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(invServiceId));
+        const isInvJobCardIdUuid = !!(invJobCardId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(invJobCardId));
+
+        if (actorId) {
+          if (isActorIdUuid && isInvoiceIdUuid) {
+            try {
+              const [techRow] = await executor
+                .select({ id: technicians.id })
+                .from(technicians)
+                .where(or(eq(technicians.id, actorId), eq(technicians.userId, actorId)))
+                .limit(1);
+              if (techRow) {
+                techId = techRow.id;
+              }
+            } catch {}
+          }
+          if (!techId) {
+            techId = actorId;
+          }
+        }
+
+        if (!techId && invServiceId) {
+          if (isInvServiceIdUuid && isInvoiceIdUuid) {
+            try {
+              const [srvRow] = await executor
+                .select({ technicianId: services.technicianId })
+                .from(services)
+                .where(eq(services.id, invServiceId))
+                .limit(1);
+              if (srvRow?.technicianId) {
+                techId = srvRow.technicianId;
+              }
+            } catch {}
+          }
+          if (!techId) {
+            const memSrv = memoryServices.find((s) => s.id === invServiceId);
+            if (memSrv?.technicianId) {
+              techId = memSrv.technicianId;
+            }
+          }
+        }
+
+        if (!techId && invJobCardId) {
+          if (isInvJobCardIdUuid && isInvoiceIdUuid) {
+            try {
+              const [jcRow] = await executor
+                .select({ technicianId: jobCards.technicianId })
+                .from(jobCards)
+                .where(eq(jobCards.id, invJobCardId))
+                .limit(1);
+              if (jcRow?.technicianId) {
+                techId = jcRow.technicianId;
+              }
+            } catch {}
+          }
+          if (!techId) {
+            const memJc = memoryJobCards.find((j) => j.id === invJobCardId);
+            if (memJc?.technicianId) {
+              techId = memJc.technicianId;
+            }
+          }
+        }
+
+        if (techId) {
+          await cashHandoversRepository.createHandover(
+            {
+              paymentId: newPayment.id,
+              serviceId: invServiceId || null,
+              jobCardId: invJobCardId || null,
+              technicianId: techId,
+              amount: Number(newPayment.amount),
+              notes: newPayment.notes,
+              collectedAt: newPayment.paymentDate ? new Date(newPayment.paymentDate) : now,
+              companyId: (invoice as any).companyId || null,
+            },
+            isInvoiceIdUuid ? executor : undefined
+          );
+        }
+      } catch (chErr) {
+        // Non-blocking cash handover creation
+      }
     }
 
     // Resilient sync to in-memory store

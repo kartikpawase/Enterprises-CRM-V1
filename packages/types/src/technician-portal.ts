@@ -50,9 +50,31 @@ export interface TechnicianWorkSummary {
   isAverageCompletionTimeReliable?: boolean;
 }
 
+export interface ActiveJobSpareItem {
+  itemName: string;
+  sku?: string | null;
+  quantity: number;
+  unitPrice: number;
+  source: 'Inventory' | 'Manual';
+  isWarrantyCovered?: boolean;
+}
+
+export interface ActiveJobSpareRecord {
+  jobCardId: string;
+  jobCardNumber: string;
+  serviceId?: string | null;
+  serviceNumber: string;
+  customerName: string;
+  status: string;
+  parts: ActiveJobSpareItem[];
+  updatedAt?: string;
+}
+
 export interface Technician360ResponseData {
   technician: Technician360Profile;
   workSummary: TechnicianWorkSummary;
+  activeJobSpares?: ActiveJobSpareRecord[];
+  cashSummary?: TechnicianCashSummary;
 }
 
 export interface TechnicianAdminServiceItem {
@@ -323,6 +345,12 @@ export interface TechnicianServiceDetail {
   problemReported?: string | null;
   diagnosis?: string | null;
   workPerformed?: string | null;
+  partsReplaced?: any[];
+  technicianNotes?: string | null;
+  holdReason?: string | null;
+  laborCharges?: string | number | null;
+  partsCharges?: string | number | null;
+  totalCharges?: string | number | null;
   // Customer Context
   customer: {
     id: string;
@@ -362,21 +390,28 @@ export interface TechnicianServiceDetail {
 export type TechnicianServiceViewTab = 'all' | 'today' | 'upcoming' | 'in_progress' | 'on_hold' | 'completed';
 
 export interface TechnicianJobExecutionInput {
-  problemReported?: string;
-  diagnosis?: string;
-  workPerformed?: string;
-  technicianNotes?: string;
-  customerRemarks?: string;
+  problemReported?: string | null;
+  diagnosis?: string | null;
+  workPerformed?: string | null;
+  technicianNotes?: string | null;
+  customerRemarks?: string | null;
   partsReplaced?: Array<{
-    itemId?: string;
+    itemId?: string | null;
+    productId?: string | null;
+    inventoryItemId?: string | null;
+    sku?: string | null;
     itemName: string;
+    description?: string | null;
     quantity: number;
-    isWarrantyCovered?: boolean;
-    price?: number;
-  }>;
-  businessFields?: Record<string, any>;
-  customerSignatureFileId?: string;
+    isWarrantyCovered?: boolean | null;
+    price?: number | null;
+    unitPrice?: number | null;
+    inventoryDeducted?: boolean | null;
+  }> | null;
+  businessFields?: Record<string, any> | null;
+  customerSignatureFileId?: string | null;
 }
+
 
 // ==========================================
 // 4. BILLING & PAYMENT COLLECTION
@@ -548,4 +583,66 @@ export interface TechnicianPersonalSummaryResponse {
   success: boolean;
   data: TechnicianPersonalSummary;
 }
+
+// ==========================================
+// CASH HANDOVER & COLLECTION CONTRACTS
+// ==========================================
+
+export type CashHandoverStatus = 'PENDING' | 'SUBMITTED' | 'RECEIVED';
+
+export interface CashHandoverItem {
+  id: string;
+  paymentId: string;
+  paymentNumber?: string;
+  serviceId?: string | null;
+  serviceNumber?: string | null;
+  jobCardId?: string | null;
+  jobCardNumber?: string | null;
+  technicianId: string;
+  technicianName?: string;
+  customerId?: string | null;
+  customerName?: string | null;
+  amount: number;
+  status: CashHandoverStatus;
+  collectedAt: string | Date;
+  submittedAt?: string | Date | null;
+  handedOverAt?: string | Date | null;
+  receivedBy?: string | null;
+  receivedByName?: string | null;
+  notes?: string | null;
+  companyId?: string | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+export interface CashHandoverSummary {
+  totalCollected: number;
+  totalSubmitted: number;
+  totalReceived: number;
+  totalPending: number;
+  outstandingBalance: number;
+  byTechnician: {
+    technicianId: string;
+    technicianName: string;
+    collected: number;
+    submitted: number;
+    received: number;
+    pending: number;
+    outstandingBalance: number;
+  }[];
+}
+
+export interface TechnicianCashSummary {
+  cashCollected: number;
+  submittedForHandover: number;
+  cashHandedOver: number;
+  pendingHandover: number;
+  outstandingBalance: number;
+}
+
+export interface TechnicianCashSummaryResponse {
+  success: boolean;
+  data: TechnicianCashSummary;
+}
+
 

@@ -45,6 +45,23 @@ vi.mock('../analytics/analytics.api', () => ({
   useServiceAnalytics: () => ({ data: {}, isLoading: false }),
   useTechnicianAnalytics: () => ({ data: {}, isLoading: false }),
   useInquiryAnalytics: () => ({ data: {}, isLoading: false }),
+  useFinancialSummaryQuery: () => ({
+    data: {
+      period: '2026-10-01 to 2026-10-31',
+      totalServiceRevenue: 120000,
+      totalCustomerPaymentsReceived: 115000,
+      totalExpenses: 25000,
+      cogsAmount: 40000,
+      grossProfit: 80000,
+      netProfit: 50000,
+      cashCollectedByTechnicians: 35000,
+      cashHandedOverToOwner: 30000,
+      pendingTechnicianCash: 5000,
+      shopCashMovementBalance: 20000,
+    },
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
 }));
 
 vi.mock('../customers/customer.api', () => ({

@@ -794,11 +794,11 @@ export class TechniciansRepository {
       parts.forEach((p: any) => {
         if (!p) return;
         partsUsed.push({
-          partName: p.partName || p.name || 'Component / Spare Part',
+          partName: p.partName || p.itemName || p.name || 'Component / Spare Part',
           partSku: p.partSku || p.sku || null,
           quantity: Number(p.quantity || 1),
           isWarrantyCovered: Boolean(p.isWarrantyCovered),
-          price: p.price ?? null,
+          price: p.price ?? p.unitPrice ?? null,
           jobCardId: j.id,
           jobCardNumber: j.jobCardNumber,
           date: j.completedAt ? new Date(j.completedAt).toISOString() : j.createdAt ? new Date(j.createdAt).toISOString() : '',

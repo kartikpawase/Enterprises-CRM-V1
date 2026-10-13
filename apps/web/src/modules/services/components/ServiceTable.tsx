@@ -27,6 +27,8 @@ import {
   type ServiceItem,
 } from '../services.api';
 import { useToast } from '../../../providers/ToastProvider';
+import { requestGoogleReviewViaWhatsApp } from '../../../lib/whatsapp';
+import { useAuth } from '../../../providers/AuthBoundary';
 
 export interface ServiceTableProps {
   services: ServiceItem[];
@@ -99,6 +101,40 @@ export const ServiceTable: React.FC<ServiceTableProps> = ({
   const notifyCustomerWhatsAppMutation = useNotifyServiceCustomerWhatsAppMutation();
   const deleteServiceMutation = useDeleteServiceMutation();
   const [selectedHoldService, setSelectedHoldService] = useState<HoldStatusData | null>(null);
+  const { user, hasRole, hasPermission } = useAuth();
+  const isAuthorized =
+    !user ||
+    (typeof hasRole === 'function' && hasRole('Admin', 'Super Admin')) ||
+    user?.role === 'Admin' ||
+    user?.role === 'Super Admin' ||
+    (typeof hasPermission === 'function' && (hasPermission('whatsapp.send') || hasPermission('services.update')));
+
+  const handleRequestGoogleReview = (row: ServiceItem) => {
+    if (!isAuthorized) {
+      toast.error('You are not authorized to send WhatsApp review requests.', 'Unauthorized');
+      return;
+    }
+    if (row.status !== 'COMPLETED') {
+      toast.error('Google review requests can only be sent for completed services.', 'Service Not Completed');
+      return;
+    }
+
+    const result = requestGoogleReviewViaWhatsApp({
+      phone: row.customerPhone,
+    });
+
+    if (result.success) {
+      toast.success(
+        `WhatsApp opened with Google Review request for ${row.customerName || 'customer'}`,
+        'WhatsApp Opened'
+      );
+    } else {
+      toast.error(
+        result.error || 'Customer phone number is missing or invalid.',
+        'Invalid Phone Number'
+      );
+    }
+  };
 
   const handleNotifyCustomerWhatsApp = async (row: ServiceItem) => {
     try {
@@ -446,6 +482,20 @@ export const ServiceTable: React.FC<ServiceTableProps> = ({
             >
               <Pencil className="w-3.5 h-3.5 mr-1 text-slate-500" />
               Edit
+            </Button>
+          )}
+
+          {/* Request Google Review (Only when service is COMPLETED) */}
+          {row.status === 'COMPLETED' && isAuthorized && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleRequestGoogleReview(row)}
+              className="h-8 px-2.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-300 shadow-2xs"
+              title="Open WhatsApp with Google Review request"
+            >
+              <MessageSquare className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+              Request Google Review
             </Button>
           )}
 

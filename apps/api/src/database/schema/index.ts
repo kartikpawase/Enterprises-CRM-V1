@@ -31,6 +31,8 @@ export * from './rentals';
 export * from './inventory-items';
 export * from './chatbot';
 export * from './technician-portal';
+export * from './cash-handovers';
+export * from './expenses';
 
 // Export all Relations
 export * from './relations';

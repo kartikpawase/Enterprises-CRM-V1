@@ -16,14 +16,20 @@ import {
   products,
   inventoryBalances,
   inventoryTransactions,
+  expenses,
+  cashHandovers,
+  inventorySales,
 } from '../../database/schema';
 import { sql, eq, and, gte, lte, count } from 'drizzle-orm';
+import type { FinancialSummaryReport } from '@crm/types';
 import { memorySales } from '../sales/sales.repository';
 import { memoryInvoices } from '../invoices/invoices.repository';
 import { memoryPayments } from '../payments/payments.repository';
 import { memoryCustomers } from '../customers/customer.repository';
 import { memoryServices } from '../services/services.repository';
 import { memoryTechnicians, INITIAL_TECHNICIANS } from '../technicians/technicians.repository';
+import { memoryExpenses } from '../expenses/expenses.repository';
+import { memoryCashHandovers } from '../payments/cash-handovers.repository';
 
 export interface DateRangeBounds {
   startDate: Date;
@@ -1529,6 +1535,260 @@ export class AnalyticsRepository {
         inquirySourceDistribution: [],
         inquiryTypeDistribution: [],
         inquiryTrend,
+      };
+    }
+  }
+
+  /**
+   * Financial Summary Report connecting Revenue, Customer Payments, Expenses, COGS, and Technician Cash
+   */
+  async getFinancialSummary(bounds: DateRangeBounds, companyId?: string | null): Promise<FinancialSummaryReport> {
+    const startIso = bounds.startDate instanceof Date ? bounds.startDate.toISOString() : String(bounds.startDate);
+    const endIso = bounds.endDate instanceof Date ? bounds.endDate.toISOString() : String(bounds.endDate);
+    const invoiceDateCol = sql`COALESCE(${invoices.invoiceDate}, ${invoices.createdAt})`;
+    const paymentDateCol = sql`COALESCE(${payments.paymentDate}, ${payments.createdAt})`;
+
+    try {
+      const [
+        [serviceRevRow],
+        [paymentsRow],
+        [expensesRow],
+        [cogsRow],
+        [techCollectedRow],
+        [ownerReceivedRow],
+        [pendingTechRow],
+      ] = await Promise.all([
+        // 1. Authoritative Service Revenue in period
+        db
+          .select({
+            total: sql<string>`COALESCE(SUM(${invoices.totalAmount}), 0)`,
+          })
+          .from(invoices)
+          .where(
+            and(
+              gte(invoiceDateCol, startIso),
+              lte(invoiceDateCol, endIso),
+              sql`${invoices.status} IN ('ISSUED', 'PAID', 'PARTIALLY_PAID', 'OVERDUE')`,
+              sql`${invoices.cancelledAt} IS NULL`,
+              sql`(${invoices.jobCardId} IS NOT NULL OR ${invoices.serviceId} IS NOT NULL)`
+            )
+          ),
+
+        // 2. Total Customer Payments Received in period (Completed)
+        db
+          .select({
+            total: sql<string>`COALESCE(SUM(${payments.amount}), 0)`,
+          })
+          .from(payments)
+          .where(
+            and(
+              gte(paymentDateCol, startIso),
+              lte(paymentDateCol, endIso),
+              eq(payments.status, 'COMPLETED')
+            )
+          ),
+
+        // 3. Total Valid Operating Expenses in period
+        db
+          .select({
+            total: sql<string>`COALESCE(SUM(${expenses.amount}), 0)`,
+            cashTotal: sql<string>`COALESCE(SUM(CASE WHEN LOWER(${expenses.paymentMethod}) = 'cash' THEN ${expenses.amount} ELSE 0 END), 0)`,
+          })
+          .from(expenses)
+          .where(
+            and(
+              gte(expenses.expenseDate, bounds.startDate),
+              lte(expenses.expenseDate, bounds.endDate),
+              eq(expenses.status, 'RECORDED'),
+              companyId ? eq(expenses.companyId, companyId) : sql`1=1`
+            )
+          ),
+
+        // 4. COGS from Inventory Sales in period
+        db
+          .select({
+            totalCost: sql<string>`COALESCE(SUM(${inventorySales.totalCostAmount}), 0)`,
+          })
+          .from(inventorySales)
+          .where(
+            and(
+              gte(inventorySales.saleDate, bounds.startDate),
+              lte(inventorySales.saleDate, bounds.endDate)
+            )
+          ),
+
+        // 5. Cash Collected by Technicians in period
+        db
+          .select({
+            total: sql<string>`COALESCE(SUM(${cashHandovers.amount}), 0)`,
+          })
+          .from(cashHandovers)
+          .where(
+            and(
+              gte(cashHandovers.collectedAt, bounds.startDate),
+              lte(cashHandovers.collectedAt, bounds.endDate),
+              companyId ? eq(cashHandovers.companyId, companyId) : sql`1=1`
+            )
+          ),
+
+        // 6. Cash Handed Over to Owner in period (Received)
+        db
+          .select({
+            total: sql<string>`COALESCE(SUM(${cashHandovers.amount}), 0)`,
+          })
+          .from(cashHandovers)
+          .where(
+            and(
+              eq(cashHandovers.status, 'RECEIVED'),
+              gte(cashHandovers.handedOverAt, bounds.startDate),
+              lte(cashHandovers.handedOverAt, bounds.endDate),
+              companyId ? eq(cashHandovers.companyId, companyId) : sql`1=1`
+            )
+          ),
+
+        // 7. Pending Technician Cash
+        db
+          .select({
+            total: sql<string>`COALESCE(SUM(${cashHandovers.amount}), 0)`,
+          })
+          .from(cashHandovers)
+          .where(
+            and(
+              eq(cashHandovers.status, 'PENDING'),
+              companyId ? eq(cashHandovers.companyId, companyId) : sql`1=1`
+            )
+          ),
+      ]);
+
+      const totalServiceRevenue = Number(Number(serviceRevRow?.total || 0).toFixed(2));
+      const totalCustomerPaymentsReceived = Number(Number(paymentsRow?.total || 0).toFixed(2));
+      const totalExpenses = Number(Number(expensesRow?.total || 0).toFixed(2));
+      const cashExpenses = Number(Number(expensesRow?.cashTotal || 0).toFixed(2));
+      const cogsAmount = Number(Number(cogsRow?.totalCost || 0).toFixed(2));
+      const cashCollectedByTechnicians = Number(Number(techCollectedRow?.total || 0).toFixed(2));
+      const cashHandedOverToOwner = Number(Number(ownerReceivedRow?.total || 0).toFixed(2));
+      const pendingTechnicianCash = Number(Number(pendingTechRow?.total || 0).toFixed(2));
+
+      if (
+        (totalExpenses === 0 && memoryExpenses.length > 0) ||
+        (cashCollectedByTechnicians === 0 && memoryCashHandovers.length > 0) ||
+        (totalCustomerPaymentsReceived === 0 && memoryPayments.length > 0)
+      ) {
+        throw new Error('Fallback to in-memory financial summary');
+      }
+
+      const grossProfit = Number((totalServiceRevenue - cogsAmount).toFixed(2));
+      const netProfit = Number((totalCustomerPaymentsReceived - cogsAmount - totalExpenses).toFixed(2));
+      const shopCashMovementBalance = Number((cashHandedOverToOwner - cashExpenses).toFixed(2));
+
+      return {
+        period: `${startIso.split('T')[0]} to ${endIso.split('T')[0]}`,
+        startDate: startIso,
+        endDate: endIso,
+        totalServiceRevenue,
+        totalCustomerPaymentsReceived,
+        totalExpenses,
+        cogsAmount,
+        grossProfit,
+        netProfit,
+        cashCollectedByTechnicians,
+        cashHandedOverToOwner,
+        pendingTechnicianCash,
+        shopCashMovementBalance,
+      };
+    } catch (_err) {
+      // Memory fallback
+      const startMs = bounds.startDate.getTime();
+      const endMs = bounds.endDate.getTime();
+
+      let totalServiceRevenue = 0;
+      for (const inv of memoryInvoices) {
+        const d = new Date(inv.invoiceDate || inv.createdAt).getTime();
+        if (
+          d >= startMs &&
+          d <= endMs &&
+          (inv.jobCardId || inv.serviceId) &&
+          inv.status !== 'CANCELLED' &&
+          inv.status !== 'DRAFT'
+        ) {
+          totalServiceRevenue += Number(inv.totalAmount || 0);
+        }
+      }
+
+      let totalCustomerPaymentsReceived = 0;
+      for (const p of memoryPayments) {
+        const d = new Date(p.paymentDate || p.createdAt).getTime();
+        if (d >= startMs && d <= endMs && p.status === 'COMPLETED') {
+          totalCustomerPaymentsReceived += Number(p.amount || 0);
+        }
+      }
+
+      let totalExpenses = 0;
+      let cashExpenses = 0;
+      for (const e of memoryExpenses) {
+        const d = new Date(e.expenseDate).getTime();
+        if (d >= startMs && d <= endMs && e.status === 'RECORDED' && (!companyId || e.companyId === companyId)) {
+          const amt = Number(e.amount || 0);
+          totalExpenses += amt;
+          if (e.paymentMethod?.toLowerCase() === 'cash') {
+            cashExpenses += amt;
+          }
+        }
+      }
+
+      let cogsAmount = 0;
+      for (const s of memorySales) {
+        const d = new Date(s.saleDate || s.createdAt).getTime();
+        if (d >= startMs && d <= endMs) {
+          cogsAmount += Number(s.totalCostAmount || 0);
+        }
+      }
+
+      let cashCollectedByTechnicians = 0;
+      let cashHandedOverToOwner = 0;
+      let pendingTechnicianCash = 0;
+      for (const h of memoryCashHandovers) {
+        if (companyId && h.companyId && h.companyId !== companyId) continue;
+        const collD = new Date(h.collectedAt).getTime();
+        if (collD >= startMs && collD <= endMs) {
+          cashCollectedByTechnicians += Number(h.amount || 0);
+        }
+        if (h.status === 'RECEIVED' && h.handedOverAt) {
+          const handD = new Date(h.handedOverAt).getTime();
+          if (handD >= startMs && handD <= endMs) {
+            cashHandedOverToOwner += Number(h.amount || 0);
+          }
+        } else if (h.status === 'PENDING') {
+          pendingTechnicianCash += Number(h.amount || 0);
+        }
+      }
+
+      totalServiceRevenue = Number(totalServiceRevenue.toFixed(2));
+      totalCustomerPaymentsReceived = Number(totalCustomerPaymentsReceived.toFixed(2));
+      totalExpenses = Number(totalExpenses.toFixed(2));
+      cogsAmount = Number(cogsAmount.toFixed(2));
+      cashCollectedByTechnicians = Number(cashCollectedByTechnicians.toFixed(2));
+      cashHandedOverToOwner = Number(cashHandedOverToOwner.toFixed(2));
+      pendingTechnicianCash = Number(pendingTechnicianCash.toFixed(2));
+
+      const grossProfit = Number((totalServiceRevenue - cogsAmount).toFixed(2));
+      const netProfit = Number((totalCustomerPaymentsReceived - cogsAmount - totalExpenses).toFixed(2));
+      const shopCashMovementBalance = Number((cashHandedOverToOwner - cashExpenses).toFixed(2));
+
+      return {
+        period: `${startIso.split('T')[0]} to ${endIso.split('T')[0]}`,
+        startDate: startIso,
+        endDate: endIso,
+        totalServiceRevenue,
+        totalCustomerPaymentsReceived,
+        totalExpenses,
+        cogsAmount,
+        grossProfit,
+        netProfit,
+        cashCollectedByTechnicians,
+        cashHandedOverToOwner,
+        pendingTechnicianCash,
+        shopCashMovementBalance,
       };
     }
   }

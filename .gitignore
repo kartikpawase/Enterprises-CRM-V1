@@ -64,5 +64,7 @@ infrastructure/nginx/certs/*.pem
 backups/
 *.sql.gz
 *.sql.gz.sha256
+*.srmbackup
+*.srmbackup.json
 .directory
 

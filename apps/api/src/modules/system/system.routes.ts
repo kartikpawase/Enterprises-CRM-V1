@@ -25,6 +25,8 @@ import {
   memoryNotifications,
   memoryNotificationPreferences,
 } from '../notifications/notifications.repository';
+import { memoryExpenses, memoryExpenseSchedules, memoryMonthlyClosings } from '../expenses/expenses.repository';
+import { memoryCashHandovers } from '../payments/cash-handovers.repository';
 
 export function resetAllMemoryStores() {
   try {
@@ -45,6 +47,10 @@ export function resetAllMemoryStores() {
     memoryRentals.length = 0;
     memoryRentalPayments.length = 0;
     memoryNotifications.length = 0;
+    memoryExpenses.length = 0;
+    memoryExpenseSchedules.length = 0;
+    memoryMonthlyClosings.length = 0;
+    memoryCashHandovers.length = 0;
     memoryNotificationPreferences.clear();
   } catch {}
 }
@@ -79,6 +85,7 @@ export const systemRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [authenticate, requirePermission('settings.manage')] },
     async (_request, reply) => {
       const tablesToClean = [
+        'cash_handovers',
         'job_cards',
         'service_schedules',
         'services',
@@ -101,6 +108,8 @@ export const systemRoutes: FastifyPluginAsync = async (fastify) => {
         'inventory_items',
         'reminders',
         'technicians',
+        'expenses',
+        'expense_schedules',
         'inquiry_events',
         'inquiries',
         'whatsapp_events',
@@ -185,6 +194,7 @@ export const systemRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [authenticate, requirePermission('settings.manage')] },
     async (_request, reply) => {
       const allBusinessTables = [
+        'cash_handovers',
         'job_cards',
         'service_schedules',
         'services',
@@ -207,6 +217,9 @@ export const systemRoutes: FastifyPluginAsync = async (fastify) => {
         'inventory_items',
         'reminders',
         'technicians',
+        'expenses',
+        'expense_schedules',
+        'monthly_closings',
         'inquiry_events',
         'inquiries',
         'whatsapp_events',

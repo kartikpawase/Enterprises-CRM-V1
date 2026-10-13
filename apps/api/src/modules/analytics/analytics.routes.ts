@@ -56,6 +56,26 @@ export const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
   );
 
   /**
+   * GET /api/v1/analytics/financial-summary
+   */
+  fastify.get(
+    '/financial-summary',
+    { preHandler: [requirePermission('reports.view')] },
+    async (request, reply) => {
+      const user = (request as any).user;
+      if (!analyticsService.checkFinancialPermission(user?.role)) {
+        return reply.status(403).send({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'You are not authorized to view financial analytics.' },
+        });
+      }
+      const filter = analyticsDateFilterSchema.parse(request.query) as AnalyticsDateFilter;
+      const data = await analyticsService.getFinancialSummary(filter, user?.companyId);
+      return reply.status(200).send({ success: true, data });
+    }
+  );
+
+  /**
    * GET /api/v1/analytics/payments
    */
   fastify.get(

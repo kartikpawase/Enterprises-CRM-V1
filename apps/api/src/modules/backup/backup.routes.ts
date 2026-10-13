@@ -203,7 +203,7 @@ export const backupRoutes: FastifyPluginAsync = async (fastify) => {
         const fileInfo = await backupService.getBackupDownloadStream(id);
         return reply
           .header('Content-Disposition', `attachment; filename="${fileInfo.filename}"`)
-          .header('Content-Type', fileInfo.contentType || 'application/gzip')
+          .header('Content-Type', fileInfo.contentType || 'application/octet-stream')
           .send(fileInfo.stream);
       } catch (err: any) {
         return reply.status(HTTP_STATUS.NOT_FOUND).send({
